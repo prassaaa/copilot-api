@@ -7,13 +7,13 @@
     "github-copilot",
     "openai-compatible"
   ],
-  "homepage": "https://github.com/ericc-ch/copilot-api",
-  "bugs": "https://github.com/ericc-ch/copilot-api/issues",
+  "homepage": "https://github.com/prassaaa/copilot-api",
+  "bugs": "https://github.com/prassaaa/copilot-api/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ericc-ch/copilot-api.git"
+    "url": "git+https://github.com/prassaaa/copilot-api.git"
   },
-  "author": "Erick Christian <erickchristian48@gmail.com>",
+  "author": "Prasetyo Ari Wibowo",
   "type": "module",
   "bin": {
     "copilot-api": "./dist/main.js"
