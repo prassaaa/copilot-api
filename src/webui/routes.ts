@@ -40,6 +40,7 @@ import { requestCache } from "~/lib/request-cache"
 import { updateQueueConfig } from "~/lib/request-queue"
 import { state } from "~/lib/state"
 import { usageStats } from "~/lib/usage-stats"
+import { checkVersion } from "~/lib/version-check"
 import { getDeviceCode } from "~/services/github/get-device-code"
 import { pollAccessToken } from "~/services/github/poll-access-token"
 import { cacheRoutes } from "~/webui/api/cache"
@@ -117,6 +118,18 @@ webuiRoutes.post("/api/logout", (c) => {
 
   setCookie(c, "session", "", { maxAge: 0 })
   return c.json({ status: "ok", message: "Logged out" })
+})
+
+/**
+ * GET /api/version-check - Check if local WebUI matches GitHub main
+ */
+webuiRoutes.get("/api/version-check", async (c) => {
+  try {
+    const result = await checkVersion()
+    return c.json(result)
+  } catch (error) {
+    return c.json({ status: "error", message: (error as Error).message }, 500)
+  }
 })
 
 /**
