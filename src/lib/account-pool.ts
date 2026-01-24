@@ -227,6 +227,35 @@ async function ensurePoolStateLoaded(): Promise<void> {
   }
 }
 
+function updateAccountToken(
+  account: AccountStatus,
+  copilotToken: string,
+  expiresIn: number,
+): void {
+  account.copilotToken = copilotToken
+  account.copilotTokenExpires = Date.now() + expiresIn * 1000
+  account.active = true
+  account.rateLimited = false
+}
+
+function markAccountInactive(account: AccountStatus): void {
+  account.active = false
+}
+
+async function refreshAccountToken(account: AccountStatus): Promise<void> {
+  const needsRefresh =
+    !account.copilotTokenExpires
+    || Date.now() > account.copilotTokenExpires - 60000
+  if (needsRefresh) {
+    try {
+      const copilot = await getCopilotToken(account.token)
+      updateAccountToken(account, copilot.token, copilot.refresh_in)
+    } catch {
+      markAccountInactive(account)
+    }
+  }
+}
+
 export async function initializePool(config: PoolConfig): Promise<void> {
   await loadPoolState()
   markPoolStateLoaded()
@@ -238,6 +267,19 @@ export async function initializePool(config: PoolConfig): Promise<void> {
     ...config,
     enabled: savedEnabled || config.enabled,
     strategy: savedStrategy !== "sticky" ? savedStrategy : config.strategy,
+  }
+
+  // If no accounts in config but we have saved accounts, use those
+  if (config.accounts.length === 0 && poolState.accounts.length > 0) {
+    consola.info(
+      `Using ${poolState.accounts.length} saved accounts from pool state`,
+    )
+    for (const account of poolState.accounts) {
+      await refreshAccountToken(account)
+    }
+    await savePoolState()
+    await syncAccountsToConfig()
+    return
   }
 
   if (!poolConfig.enabled || config.accounts.length === 0) {
@@ -255,20 +297,7 @@ export async function initializePool(config: PoolConfig): Promise<void> {
     const existing = poolState.accounts.find((a) => a.token === acc.token)
 
     if (existing) {
-      if (
-        !existing.copilotTokenExpires
-        || Date.now() > existing.copilotTokenExpires - 60000
-      ) {
-        try {
-          const copilot = await getCopilotToken(existing.token)
-          existing.copilotToken = copilot.token
-          existing.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
-          existing.active = true
-          existing.rateLimited = false
-        } catch {
-          existing.active = false
-        }
-      }
+      await refreshAccountToken(existing)
       newAccounts.push(existing)
     } else {
       const account = await initializeAccount(acc.token, acc.label)

@@ -187,15 +187,14 @@ export async function runServer(options: RunServerOptions): Promise<void> {
 
   await initializeServices(config)
 
-  const poolConfig = config.poolEnabled && config.poolAccounts.length > 0
-  if (poolConfig) {
-    await setupAccountPool()
-  }
+  // Always try to setup account pool to load saved accounts
+  await setupAccountPool()
+  const poolConfigured = config.poolEnabled && config.poolAccounts.length > 0
 
-  await setupGitHubAuth(options, config, poolConfig)
+  await setupGitHubAuth(options, config, poolConfigured)
   await setupCopilotToken(state.githubToken)
   await cacheModels()
-  await addInitialAccountIfNeeded(poolConfig)
+  await addInitialAccountIfNeeded(poolConfigured)
 
   consola.info(
     `Available models: \n${state.models?.data.map((model) => `- ${model.id}`).join("\n")}`,
