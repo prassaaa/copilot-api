@@ -19,6 +19,7 @@ import {
   needsQuotaRefresh,
   refreshAllQuotas as refreshAllQuotasInternal,
 } from "./account-pool-quota"
+import { getConfig, saveConfig } from "./config"
 
 export type SelectionStrategy =
   | "sticky"
@@ -141,6 +142,32 @@ async function savePoolState(): Promise<void> {
     await fs.writeFile(POOL_FILE, JSON.stringify(stateToSave, null, 2))
   } catch (error) {
     consola.error("Failed to save pool state:", error)
+  }
+}
+
+/**
+ * Sync poolConfig.accounts to config.json
+ * This ensures accounts persist across server restarts
+ */
+async function syncAccountsToConfig(): Promise<void> {
+  try {
+    const config = getConfig()
+    const currentTokens = new Set(config.poolAccounts.map((a) => a.token))
+    const poolTokens = poolConfig.accounts
+
+    // Check if there are any new tokens to add
+    const newAccounts = poolTokens.filter((a) => !currentTokens.has(a.token))
+
+    if (newAccounts.length > 0) {
+      await saveConfig({
+        poolEnabled: poolConfig.enabled,
+        poolStrategy: poolConfig.strategy,
+        poolAccounts: [...config.poolAccounts, ...newAccounts],
+      })
+      consola.debug(`Synced ${newAccounts.length} account(s) to config`)
+    }
+  } catch (error) {
+    consola.error("Failed to sync accounts to config:", error)
   }
 }
 
@@ -575,6 +602,7 @@ export async function addAccount(
     }
 
     await savePoolState()
+    await syncAccountsToConfig()
     consola.success(`Account ${account.login} added to pool`)
   }
 
@@ -649,6 +677,7 @@ export async function addInitialAccount(
   }
 
   await savePoolState()
+  await syncAccountsToConfig()
   consola.success(`Initial account ${account.login} added to pool`)
 
   return account
@@ -672,6 +701,18 @@ export async function removeAccount(
   }
 
   await savePoolState()
+
+  // Sync removal to config.json
+  try {
+    const config = getConfig()
+    const updatedPoolAccounts = config.poolAccounts.filter(
+      (a) => a.token !== token,
+    )
+    await saveConfig({ poolAccounts: updatedPoolAccounts })
+  } catch (error) {
+    consola.error("Failed to sync account removal to config:", error)
+  }
+
   consola.info(`Account ${id} removed from pool`)
   return { removed: true, token }
 }

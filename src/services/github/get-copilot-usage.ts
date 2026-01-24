@@ -65,4 +65,4 @@ interface CopilotUsageResponse {
   quota_snapshots: QuotaSnapshots
 }
 
-export type { CopilotUsageResponse, QuotaDetail, QuotaSnapshots }
+export type { CopilotUsageResponse, QuotaSnapshots }

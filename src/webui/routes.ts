@@ -579,19 +579,7 @@ webuiRoutes.post("/api/accounts", async (c) => {
       return c.json({ status: "error", error: "Failed to add account" }, 400)
     }
 
-    // Sync config file with pool state
-    // addAccount already adds to poolConfig.accounts, so we just need to persist
-    const config = getConfig()
-    const existingTokens = new Set(config.poolAccounts.map((a) => a.token))
-    if (!existingTokens.has(body.token)) {
-      await saveConfig({
-        poolEnabled: true,
-        poolAccounts: [
-          ...config.poolAccounts,
-          { token: body.token, label: body.label },
-        ],
-      })
-    }
+    // addAccount now handles syncing to config.json internally
 
     return c.json({
       status: "ok",
@@ -619,14 +607,7 @@ webuiRoutes.delete("/api/accounts/:id", async (c) => {
       return c.json({ status: "error", error: "Account not found" }, 404)
     }
 
-    // Sync with config file - remove the account token from poolAccounts
-    if (result.token) {
-      const config = getConfig()
-      const updatedPoolAccounts = config.poolAccounts.filter(
-        (acc) => acc.token !== result.token,
-      )
-      await saveConfig({ poolAccounts: updatedPoolAccounts })
-    }
+    // removeAccount now handles syncing to config.json internally
 
     return c.json({
       status: "ok",
@@ -810,15 +791,7 @@ webuiRoutes.post("/api/accounts/oauth/complete", async (c) => {
       return c.json({ status: "error", error: "Failed to add account" }, 400)
     }
 
-    // Sync config file with pool state
-    const config = getConfig()
-    const existingTokens = new Set(config.poolAccounts.map((a) => a.token))
-    if (!existingTokens.has(token)) {
-      await saveConfig({
-        poolEnabled: true,
-        poolAccounts: [...config.poolAccounts, { token, label: flow.label }],
-      })
-    }
+    // addAccount now handles syncing to config.json internally
 
     return c.json({
       status: "ok",
