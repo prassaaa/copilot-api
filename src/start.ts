@@ -7,15 +7,21 @@ import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
 import { addInitialAccount } from "./lib/account-pool"
-import { loadConfig, saveConfig } from "./lib/config"
+import { loadConfig, saveConfig, type Config } from "./lib/config"
+import { costCalculator } from "./lib/cost-calculator"
 import { logEmitter } from "./lib/logger"
 import { ensurePaths } from "./lib/paths"
 import { initProxyFromEnv } from "./lib/proxy"
 import { requestCache } from "./lib/request-cache"
 import { requestHistory } from "./lib/request-history"
+import { initQueue } from "./lib/request-queue"
 import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
-import { setupCopilotToken, setupGitHubToken } from "./lib/token"
+import {
+  setupAccountPool,
+  setupCopilotToken,
+  setupGitHubToken,
+} from "./lib/token"
 import { usageStats } from "./lib/usage-stats"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
 import { server } from "./server"
@@ -117,28 +123,51 @@ async function setupClaudeCodeIntegration(serverUrl: string): Promise<void> {
   }
 }
 
-export async function runServer(options: RunServerOptions): Promise<void> {
-  await loadConfig()
-  await applyCliOptions(options)
-
+/**
+ * Initialize core services
+ */
+async function initializeServices(config: Config): Promise<void> {
   await ensurePaths()
   await cacheVSCodeVersion()
   await usageStats.init()
   await requestHistory.init()
   await requestCache.init()
+  await costCalculator.init()
+  initQueue({
+    enabled: config.queueEnabled,
+    maxConcurrent: config.queueMaxConcurrent,
+    maxSize: config.queueMaxSize,
+    timeout: config.queueTimeout,
+  })
+}
 
-  if (options.githubToken) {
+/**
+ * Setup GitHub token based on pool or CLI options
+ */
+async function setupGitHubAuth(
+  options: RunServerOptions,
+  config: Config,
+  poolConfig: boolean,
+): Promise<void> {
+  if (poolConfig) {
+    const poolToken = config.poolAccounts[0]?.token
+    if (poolToken) {
+      state.githubToken = poolToken
+      consola.info("Using pooled GitHub token for Copilot bootstrap")
+    }
+  } else if (options.githubToken) {
     state.githubToken = options.githubToken
     consola.info("Using provided GitHub token")
   } else {
     await setupGitHubToken()
   }
+}
 
-  await setupCopilotToken()
-  await cacheModels()
-
-  // Add initial account to pool (so all accounts are treated equally)
-  if (state.githubToken && state.githubUser) {
+/**
+ * Add initial account to pool if needed
+ */
+async function addInitialAccountIfNeeded(poolConfig: boolean): Promise<void> {
+  if (!poolConfig && state.githubToken && state.githubUser) {
     await addInitialAccount(state.githubToken, {
       login: state.githubUser.login,
       id: state.githubUser.id,
@@ -146,6 +175,25 @@ export async function runServer(options: RunServerOptions): Promise<void> {
       avatar_url: state.githubUser.avatar_url,
     })
   }
+}
+
+export async function runServer(options: RunServerOptions): Promise<void> {
+  const config = await loadConfig()
+  state.rateLimitSeconds = config.rateLimitSeconds
+  state.rateLimitWait = config.rateLimitWait
+  await applyCliOptions(options)
+
+  await initializeServices(config)
+
+  const poolConfig = config.poolEnabled && config.poolAccounts.length > 0
+  if (poolConfig) {
+    await setupAccountPool()
+  }
+
+  await setupGitHubAuth(options, config, poolConfig)
+  await setupCopilotToken(state.githubToken)
+  await cacheModels()
+  await addInitialAccountIfNeeded(poolConfig)
 
   consola.info(
     `Available models: \n${state.models?.data.map((model) => `- ${model.id}`).join("\n")}`,
