@@ -695,6 +695,24 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
+    // Set account as current (sticky)
+    async setCurrentAccount(id) {
+      try {
+        const { data } = await this.requestJson(`/api/accounts/${id}/set-current`, {
+          method: "POST",
+        })
+        if (data.status === "ok") {
+          this.accountPool.accounts = data.accounts
+          this.accountPool.currentAccountId = data.currentAccountId
+          this.showToast(`Account ${id} set as current`, "success")
+        } else {
+          throw new Error(data.error)
+        }
+      } catch (error) {
+        this.showToast("Failed to set current account: " + error.message, "error")
+      }
+    },
+
     // Refresh all account tokens
     async refreshAccounts() {
       try {
