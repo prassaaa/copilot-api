@@ -1,6 +1,6 @@
 import type { ModelsResponse } from "~/services/copilot/get-models"
 
-interface GitHubUser {
+export interface GitHubUser {
   login: string
   id: number
   avatar_url?: string
