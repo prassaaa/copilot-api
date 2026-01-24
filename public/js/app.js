@@ -119,6 +119,14 @@ document.addEventListener("alpine:init", () => {
       accountErrorAlerts: true,
       soundEnabled: false,
     },
+    versionCheck: {
+      checking: true,
+      blocked: false,
+      local: null,
+      remote: null,
+      message: "",
+      updateCommand: "",
+    },
 
     // Rate limit validation
     rateLimitError: "",
@@ -183,6 +191,7 @@ document.addEventListener("alpine:init", () => {
         await this.loadRecentLogs()
         this.connectLogStream()
         this.connectNotificationStream()
+        await this.checkVersion()
 
         // Auto-refresh every 30 seconds
         this.autoRefreshInterval = setInterval(() => {
@@ -195,6 +204,54 @@ document.addEventListener("alpine:init", () => {
             this.fetchCopilotUsage()
           }
         }, 30000)
+      }
+    },
+    async checkVersion() {
+      this.versionCheck.checking = true
+      try {
+        const { data } = await this.requestJson("/api/version-check")
+        if (data.status === "ok" && data.local && data.remote) {
+          const upToDate = data.local === data.remote
+          this.versionCheck = {
+            checking: false,
+            blocked: !upToDate,
+            local: data.local || null,
+            remote: data.remote || null,
+            message: data.message || "",
+            updateCommand: data.updateCommand || "",
+          }
+          if (!upToDate) {
+            this.versionCheck.message =
+              data.message || "Dashboard is outdated."
+          }
+        } else if (data.status === "outdated") {
+          this.versionCheck = {
+            checking: false,
+            blocked: true,
+            local: data.local || null,
+            remote: data.remote || null,
+            message: data.message || "Dashboard is outdated.",
+            updateCommand: data.updateCommand || "git pull origin main",
+          }
+        } else {
+          this.versionCheck = {
+            checking: false,
+            blocked: true,
+            local: null,
+            remote: null,
+            message: data.message || "Version check failed.",
+            updateCommand: "git pull origin main",
+          }
+        }
+      } catch (error) {
+        this.versionCheck = {
+          checking: false,
+          blocked: true,
+          local: null,
+          remote: null,
+          message: error.message || "Version check failed.",
+          updateCommand: "git pull origin main",
+        }
       }
     },
     async requestJson(url, options) {
@@ -258,6 +315,7 @@ document.addEventListener("alpine:init", () => {
           await this.fetchData()
           this.connectLogStream()
           this.connectNotificationStream()
+          await this.checkVersion()
         } else {
           this.showToast(data.error || "Login failed", "error")
         }
@@ -1439,6 +1497,10 @@ document.addEventListener("alpine:init", () => {
       if (minutes > 0) return `${minutes}m ago`
       if (seconds > 10) return `${seconds}s ago`
       return "Just now"
+    },
+    formatCommit(sha) {
+      if (!sha) return ""
+      return sha.slice(0, 8)
     },
 
     // Format timestamp for rate limit reset

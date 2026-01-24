@@ -200,6 +200,42 @@
         </div>
     </template>
 
+    <!-- Version Blocker -->
+    <template x-if="(auth.authenticated || !auth.passwordRequired) && versionCheck.blocked">
+        <div class="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50">
+            <div class="bg-space-900 border border-space-border rounded-xl p-8 w-full max-w-lg mx-4 shadow-2xl">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded bg-gradient-to-br from-neon-purple to-blue-600 flex items-center justify-center text-white font-bold glow-purple">
+                        CP
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Update Required</h2>
+                        <p class="text-xs text-gray-500">Dashboard must match latest GitHub commit</p>
+                    </div>
+                </div>
+
+                <p class="text-sm text-gray-300 mb-4" x-text="versionCheck.message || 'Your dashboard is out of date.'"></p>
+
+                <div class="bg-space-950 border border-space-border rounded-lg p-4 font-mono text-xs text-neon-cyan mb-4">
+                    <span x-text="versionCheck.updateCommand || 'git pull origin main'"></span>
+                </div>
+
+                <div class="text-xs text-gray-500 space-y-2 mb-4">
+                    <div x-show="versionCheck.local">Local: <span class="text-gray-300" x-text="formatCommit(versionCheck.local)"></span></div>
+                    <div x-show="versionCheck.remote">Remote: <span class="text-gray-300" x-text="formatCommit(versionCheck.remote)"></span></div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button @click="checkVersion()"
+                            class="px-4 py-2 rounded-lg bg-neon-purple/20 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/30 text-sm font-medium">
+                        Retry Check
+                    </button>
+                    <span class="text-xs text-gray-500" x-show="versionCheck.checking">Checking...</span>
+                </div>
+            </div>
+        </div>
+    </template>
+
     <!-- Layout -->
     <div class="flex h-[calc(100vh-56px)]" x-show="auth.authenticated || !auth.passwordRequired">
         
