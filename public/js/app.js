@@ -62,6 +62,7 @@ document.addEventListener("alpine:init", () => {
     logsSearch: "",
     logsPaused: false,
     logsConnected: false,
+    notificationsEventSource: null,
 
     // Settings
     settings: {
@@ -155,6 +156,7 @@ document.addEventListener("alpine:init", () => {
     historyOffset: 0,
     historyTotal: 0,
     historyHasMore: false,
+    autoRefreshInterval: null,
 
     // API Playground
     playground: {
@@ -180,9 +182,10 @@ document.addEventListener("alpine:init", () => {
         await this.fetchData()
         await this.loadRecentLogs()
         this.connectLogStream()
+        this.connectNotificationStream()
 
         // Auto-refresh every 30 seconds
-        setInterval(() => {
+        this.autoRefreshInterval = setInterval(() => {
           if (
             !this.loading
             && (this.auth.authenticated || !this.auth.passwordRequired)
@@ -194,13 +197,39 @@ document.addEventListener("alpine:init", () => {
         }, 30000)
       }
     },
+    async requestJson(url, options) {
+      const response = await fetch(url, options)
+      if (response.status === 401) {
+        this.handleAuthExpired()
+        throw new Error("Authentication required")
+      }
+      const data = await response.json()
+      return { response, data }
+    },
+    handleAuthExpired() {
+      this.auth.authenticated = false
+      this.auth.passwordRequired = true
+      this.auth.password = ""
+      if (this.logsEventSource) {
+        this.logsEventSource.close()
+        this.logsEventSource = null
+      }
+      if (this.notificationsEventSource) {
+        this.notificationsEventSource.close()
+        this.notificationsEventSource = null
+      }
+      if (this.autoRefreshInterval) {
+        clearInterval(this.autoRefreshInterval)
+        this.autoRefreshInterval = null
+      }
+      this.showToast("Session expired. Please login again.", "warning")
+    },
 
     // Check authentication status
     async checkAuth() {
       this.auth.checking = true
       try {
-        const response = await fetch("/api/auth-status")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/auth-status")
         this.auth.authenticated = data.authenticated
         this.auth.passwordRequired = data.passwordRequired
       } catch (error) {
@@ -216,12 +245,11 @@ document.addEventListener("alpine:init", () => {
     async login() {
       this.loading = true
       try {
-        const response = await fetch("/api/login", {
+        const { data } = await this.requestJson("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: this.auth.password }),
         })
-        const data = await response.json()
 
         if (data.status === "ok") {
           this.auth.authenticated = true
@@ -229,6 +257,7 @@ document.addEventListener("alpine:init", () => {
           this.showToast("Login successful", "success")
           await this.fetchData()
           this.connectLogStream()
+          this.connectNotificationStream()
         } else {
           this.showToast(data.error || "Login failed", "error")
         }
@@ -242,11 +271,19 @@ document.addEventListener("alpine:init", () => {
     // Logout
     async logout() {
       try {
-        await fetch("/api/logout", { method: "POST" })
+        await this.requestJson("/api/logout", { method: "POST" })
         this.auth.authenticated = false
         if (this.logsEventSource) {
           this.logsEventSource.close()
           this.logsEventSource = null
+        }
+        if (this.notificationsEventSource) {
+          this.notificationsEventSource.close()
+          this.notificationsEventSource = null
+        }
+        if (this.autoRefreshInterval) {
+          clearInterval(this.autoRefreshInterval)
+          this.autoRefreshInterval = null
         }
         this.showToast("Logged out", "info")
       } catch (error) {
@@ -326,10 +363,17 @@ document.addEventListener("alpine:init", () => {
     // Fetch server status
     async fetchStatus() {
       try {
-        const response = await fetch("/api/status")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/status")
         if (data.status === "ok") {
-          this.status = { ...this.status, ...data, connected: true }
+          this.status = {
+            ...this.status,
+            connected: true,
+            version: data.version,
+            uptime: data.uptime,
+            user: data.user,
+            accountType: data.accountType,
+            modelsCount: data.modelsCount,
+          }
           // Also update serverInfo from status
           this.serverInfo.version = data.version || this.serverInfo.version
           this.serverInfo.uptime = data.uptime || this.serverInfo.uptime
@@ -345,8 +389,7 @@ document.addEventListener("alpine:init", () => {
     // Fetch models
     async fetchModels() {
       try {
-        const response = await fetch("/api/models")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/models")
         if (data.status === "ok") {
           this.models = data.models
 
@@ -373,8 +416,7 @@ document.addEventListener("alpine:init", () => {
     // Fetch usage statistics
     async fetchUsageStats() {
       try {
-        const response = await fetch("/api/usage-stats?period=24h")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/usage-stats?period=24h")
         if (data.status === "ok") {
           this.usageStats = data.stats
           this.updateChart()
@@ -387,8 +429,7 @@ document.addEventListener("alpine:init", () => {
     // Fetch Copilot usage/quota
     async fetchCopilotUsage() {
       try {
-        const response = await fetch("/api/copilot-usage")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/copilot-usage")
         if (data.status === "ok" && data.usage) {
           this.copilotUsage = {
             access_type_sku: data.usage.access_type_sku,
@@ -407,8 +448,7 @@ document.addEventListener("alpine:init", () => {
     // Fetch configuration
     async fetchConfig() {
       try {
-        const response = await fetch("/api/config")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/config")
         if (data.status === "ok") {
           this.settings = { ...this.settings, ...data.config }
           if (data.serverInfo) {
@@ -435,8 +475,7 @@ document.addEventListener("alpine:init", () => {
     // Fetch accounts
     async fetchAccounts() {
       try {
-        const response = await fetch("/api/accounts")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/accounts")
         if (data.status === "ok") {
           this.accountPool = {
             enabled: data.poolEnabled,
@@ -453,14 +492,13 @@ document.addEventListener("alpine:init", () => {
     // Start OAuth flow for adding account
     async startOAuthFlow() {
       try {
-        const response = await fetch("/api/accounts/oauth/start", {
+        const { data } = await this.requestJson("/api/accounts/oauth/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             label: this.newAccountLabel || undefined,
           }),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.oauthFlow = {
             active: true,
@@ -483,14 +521,13 @@ document.addEventListener("alpine:init", () => {
     async completeOAuthFlow() {
       this.oauthFlow.completing = true
       try {
-        const response = await fetch("/api/accounts/oauth/complete", {
+        const { data } = await this.requestJson("/api/accounts/oauth/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             flowId: this.oauthFlow.flowId,
           }),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.resetOAuthFlow()
           this.newAccountLabel = ""
@@ -508,7 +545,7 @@ document.addEventListener("alpine:init", () => {
     // Cancel OAuth flow
     async cancelOAuthFlow() {
       try {
-        await fetch("/api/accounts/oauth/cancel", {
+        await this.requestJson("/api/accounts/oauth/cancel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ flowId: this.oauthFlow.flowId }),
@@ -536,10 +573,9 @@ document.addEventListener("alpine:init", () => {
       if (!confirm(`Remove account ${id}?`)) return
 
       try {
-        const response = await fetch(`/api/accounts/${id}`, {
+        const { data } = await this.requestJson(`/api/accounts/${id}`, {
           method: "DELETE",
         })
-        const data = await response.json()
         if (data.status === "ok") {
           await this.fetchAccounts()
           this.showToast(`Account ${id} removed`, "success")
@@ -554,12 +590,11 @@ document.addEventListener("alpine:init", () => {
     // Toggle account pause state
     async togglePauseAccount(id, paused) {
       try {
-        const response = await fetch(`/api/accounts/${id}/pause`, {
+        const { data } = await this.requestJson(`/api/accounts/${id}/pause`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ paused }),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           await this.fetchAccounts()
           this.showToast(`Account ${id} ${paused ? "paused" : "resumed"}`, "success")
@@ -574,10 +609,9 @@ document.addEventListener("alpine:init", () => {
     // Refresh all account tokens
     async refreshAccounts() {
       try {
-        const response = await fetch("/api/accounts/refresh", {
+        const { data } = await this.requestJson("/api/accounts/refresh", {
           method: "POST",
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.accountPool.accounts = data.accounts
           this.accountPool.currentAccountId = data.currentAccountId
@@ -593,10 +627,9 @@ document.addEventListener("alpine:init", () => {
     // Refresh all account quotas
     async refreshQuotas() {
       try {
-        const response = await fetch("/api/accounts/refresh-quotas", {
+        const { data } = await this.requestJson("/api/accounts/refresh-quotas", {
           method: "POST",
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.accountPool.accounts = data.accounts
           this.showToast("Quotas refreshed for all accounts", "success")
@@ -612,10 +645,9 @@ document.addEventListener("alpine:init", () => {
     async fetchAccountsQuota() {
       try {
         // First refresh quotas
-        const response = await fetch("/api/accounts/refresh-quotas", {
+        const { data } = await this.requestJson("/api/accounts/refresh-quotas", {
           method: "POST",
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.accountPool.accounts = data.accounts
         }
@@ -627,7 +659,7 @@ document.addEventListener("alpine:init", () => {
     // Update pool configuration
     async updatePoolConfig() {
       try {
-        const response = await fetch("/api/pool-config", {
+        const { data } = await this.requestJson("/api/pool-config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -635,7 +667,6 @@ document.addEventListener("alpine:init", () => {
             strategy: this.accountPool.strategy,
           }),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.showToast("Pool configuration updated", "success")
         } else {
@@ -649,7 +680,7 @@ document.addEventListener("alpine:init", () => {
     // Save settings
     async saveSettings() {
       try {
-        const response = await fetch("/api/config", {
+        const { data } = await this.requestJson("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -663,7 +694,6 @@ document.addEventListener("alpine:init", () => {
             defaultSmallModel: this.settings.defaultSmallModel,
           }),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.showToast("Settings saved successfully", "success")
         } else {
@@ -769,10 +799,9 @@ document.addEventListener("alpine:init", () => {
     async resetSettings() {
       if (!confirm("Are you sure you want to reset all settings to defaults?")) return
       try {
-        const response = await fetch("/api/config/reset", {
+        const { data } = await this.requestJson("/api/config/reset", {
           method: "POST",
         })
-        const data = await response.json()
         if (data.status === "ok") {
           await this.fetchConfig()
           this.showToast("Settings reset to defaults", "success")
@@ -862,12 +891,11 @@ document.addEventListener("alpine:init", () => {
     async updateWebuiPassword() {
       try {
         const newPassword = this.newWebuiPassword
-        const response = await fetch("/api/config", {
+        const { data } = await this.requestJson("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ webuiPassword: newPassword }),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.newWebuiPassword = ""
           this.settings.webuiPasswordSet = Boolean(newPassword)
@@ -930,12 +958,11 @@ document.addEventListener("alpine:init", () => {
           },
         }
 
-        const response = await fetch("/api/claude-config", {
+        const { data } = await this.requestJson("/api/claude-config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(config),
         })
-        const data = await response.json()
         if (data.status === "ok") {
           this.showToast("Claude CLI config updated!", "success")
         } else {
@@ -991,6 +1018,30 @@ document.addEventListener("alpine:init", () => {
         console.error("Log stream error, reconnecting...")
         this.logsConnected = false
         setTimeout(() => this.connectLogStream(), 5000)
+      }
+    },
+    connectNotificationStream() {
+      if (this.notificationsEventSource) {
+        this.notificationsEventSource.close()
+      }
+
+      this.notificationsEventSource = new EventSource(
+        "/api/notifications/stream",
+      )
+      this.notificationsEventSource.addEventListener("notification", (event) => {
+        try {
+          const notif = JSON.parse(event.data)
+          this.addNotification({
+            type: notif.type || "info",
+            title: notif.title || "Notification",
+            message: notif.message || "",
+          })
+        } catch {
+          // Ignore parse errors
+        }
+      })
+      this.notificationsEventSource.onerror = () => {
+        setTimeout(() => this.connectNotificationStream(), 5000)
       }
     },
 
@@ -1069,8 +1120,7 @@ document.addEventListener("alpine:init", () => {
     // Load recent logs from server
     async loadRecentLogs() {
       try {
-        const response = await fetch("/api/logs/recent?limit=100")
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/logs/recent?limit=100")
         if (data.status === "ok" && data.logs) {
           this.logs = data.logs
         }
@@ -1464,8 +1514,7 @@ document.addEventListener("alpine:init", () => {
         if (this.historyFilter.status) params.set("status", this.historyFilter.status)
         if (this.historyFilter.accountId) params.set("account", this.historyFilter.accountId)
 
-        const response = await fetch(`/api/history?${params}`)
-        const data = await response.json()
+        const { data } = await this.requestJson(`/api/history?${params}`)
         if (data.status === "ok") {
           this.requestHistoryEntries = data.entries || []
           this.historyTotal = data.total || 0
@@ -1473,8 +1522,7 @@ document.addEventListener("alpine:init", () => {
         }
 
         // Also fetch stats
-        const statsResponse = await fetch("/api/history/stats")
-        const statsData = await statsResponse.json()
+        const { data: statsData } = await this.requestJson("/api/history/stats")
         if (statsData.status === "ok") {
           this.historyStats = statsData.stats || {}
         }
@@ -1487,8 +1535,9 @@ document.addEventListener("alpine:init", () => {
     async clearRequestHistory() {
       if (!confirm("Are you sure you want to clear all request history?")) return
       try {
-        const response = await fetch("/api/history", { method: "DELETE" })
-        const data = await response.json()
+        const { data } = await this.requestJson("/api/history", {
+          method: "DELETE",
+        })
         if (data.status === "ok") {
           this.requestHistoryEntries = []
           this.historyStats = {}
@@ -1592,6 +1641,14 @@ document.addEventListener("alpine:init", () => {
           },
           body: JSON.stringify(body),
         })
+        if (response.status === 401) {
+          this.handleAuthExpired()
+          throw new Error("Authentication required")
+        }
+        if (!response.ok) {
+          const text = await response.text()
+          throw new Error(text || `HTTP ${response.status}`)
+        }
 
         this.playground.duration = Date.now() - startTime
 
