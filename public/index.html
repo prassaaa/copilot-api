@@ -1664,8 +1664,10 @@
                                     <label class="block text-sm font-medium text-gray-400 mb-2">Model</label>
                                     <select x-model="playground.model"
                                             @change="updatePlaygroundRequest()"
-                                            x-html="models.map(m => `<option value='${m.id}' ${m.id === playground.model ? 'selected' : ''}>${m.id}</option>`).join('')"
                                             class="w-full px-4 py-2 bg-space-950 border border-space-border rounded-lg text-white focus:border-neon-purple focus:outline-none">
+                                        <template x-for="model in models" :key="model.id">
+                                            <option :value="model.id" x-text="model.id"></option>
+                                        </template>
                                     </select>
                                 </div>
 
