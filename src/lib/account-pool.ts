@@ -168,7 +168,10 @@ async function initializeAccount(
 
       // Fetch quota for new account
       try {
-        await fetchAccountQuotaInternal(account, poolState)
+        const quota = await fetchAccountQuotaInternal(account, poolState)
+        if (quota) {
+          account.quota = quota
+        }
       } catch {
         consola.debug(`Could not fetch initial quota for ${account.login}`)
       }
@@ -617,7 +620,10 @@ export async function addInitialAccount(
 
     // Fetch quota for initial account
     try {
-      await fetchAccountQuotaInternal(account, poolState)
+      const quota = await fetchAccountQuotaInternal(account, poolState)
+      if (quota) {
+        account.quota = quota
+      }
     } catch {
       consola.debug(`Could not fetch initial quota for ${account.login}`)
     }
