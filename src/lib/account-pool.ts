@@ -74,6 +74,7 @@ interface PoolState {
   accounts: Array<AccountStatus>
   currentIndex: number
   stickyAccountId?: string
+  lastSelectedId?: string
   // Pool config is now stored with state
   config?: {
     enabled: boolean
@@ -120,6 +121,7 @@ async function loadPoolState(): Promise<void> {
       accounts: saved.accounts ?? [],
       currentIndex: saved.currentIndex ?? 0,
       stickyAccountId: saved.stickyAccountId,
+      lastSelectedId: saved.lastSelectedId,
     }
     // Load config from saved state
     if (saved.config) {
@@ -341,23 +343,31 @@ export function selectAccount(): AccountStatus | null {
 
   if (activeAccounts.length === 0) {
     const resetAccount = resetExpiredRateLimits()
-    if (resetAccount) return resetAccount
+    if (resetAccount) {
+      poolState.lastSelectedId = resetAccount.id
+      return resetAccount
+    }
 
     consola.warn("No active accounts available in pool")
     return null
   }
 
+  let selected: AccountStatus
+
   switch (poolConfig.strategy) {
     case "sticky": {
-      return selectStickyAccount(activeAccounts)
+      selected = selectStickyAccount(activeAccounts)
+      break
     }
 
     case "round-robin": {
-      return selectRoundRobinAccount(activeAccounts)
+      selected = selectRoundRobinAccount(activeAccounts)
+      break
     }
 
     case "quota-based": {
-      return selectByQuota(activeAccounts)
+      selected = selectByQuota(activeAccounts)
+      break
     }
 
     case "hybrid": {
@@ -366,18 +376,26 @@ export function selectAccount(): AccountStatus | null {
         const sticky = activeAccounts.find(
           (a) => a.id === poolState.stickyAccountId,
         )
-        if (sticky) return sticky
+        if (sticky) {
+          selected = sticky
+          break
+        }
       }
-      const selected =
+      const nextAccount =
         activeAccounts[poolState.currentIndex % activeAccounts.length]
-      poolState.stickyAccountId = selected.id
-      return selected
+      poolState.stickyAccountId = nextAccount.id
+      selected = nextAccount
+      break
     }
 
     default: {
-      return activeAccounts[0]
+      selected = activeAccounts[0]
+      break
     }
   }
+
+  poolState.lastSelectedId = selected.id
+  return selected
 }
 
 /**
@@ -805,7 +823,27 @@ export function isPoolEnabledSync(): boolean {
  * Get current account (for status display)
  */
 export function getCurrentAccount(): AccountStatus | null {
-  return selectAccount()
+  const activeAccounts = poolState.accounts.filter(
+    (a) => a.active && !a.rateLimited && !a.paused,
+  )
+
+  if (activeAccounts.length === 0) return null
+
+  if (poolState.lastSelectedId) {
+    const lastSelected = activeAccounts.find(
+      (a) => a.id === poolState.lastSelectedId,
+    )
+    if (lastSelected) return lastSelected
+  }
+
+  if (poolState.stickyAccountId) {
+    const sticky = activeAccounts.find(
+      (a) => a.id === poolState.stickyAccountId,
+    )
+    if (sticky) return sticky
+  }
+
+  return activeAccounts[0]
 }
 
 /**
