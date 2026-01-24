@@ -124,8 +124,12 @@ async function loadPoolState(): Promise<void> {
       poolConfig.enabled = saved.config.enabled
       poolConfig.strategy = saved.config.strategy
     }
+    consola.debug(
+      `loadPoolState: loaded ${poolState.accounts.length} accounts from file`,
+    )
   } catch {
     // File doesn't exist, use defaults
+    consola.debug("loadPoolState: no file found, using defaults")
   }
 }
 
@@ -329,6 +333,9 @@ export async function initializePool(config: PoolConfig): Promise<void> {
   }
 
   // Assign merged accounts
+  consola.debug(
+    `initializePool: mergedAccounts=${mergedAccounts.length}, from config=${config.accounts.length}, from poolState=${poolState.accounts.length}`,
+  )
   poolState = {
     ...poolState,
     accounts: mergedAccounts,
@@ -772,6 +779,9 @@ export async function getAccountsStatus(): Promise<
   Array<Omit<AccountStatus, "token" | "copilotToken">>
 > {
   await ensurePoolStateLoaded()
+  consola.debug(
+    `getAccountsStatus: poolStateLoaded=${poolStateLoaded}, accounts=${poolState.accounts.length}`,
+  )
   return poolState.accounts.map((a) => ({
     id: a.id,
     login: a.login,
