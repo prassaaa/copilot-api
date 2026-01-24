@@ -782,20 +782,29 @@ export async function getAccountsStatus(): Promise<
   consola.debug(
     `getAccountsStatus: poolStateLoaded=${poolStateLoaded}, accounts=${poolState.accounts.length}`,
   )
-  return poolState.accounts.map((a) => ({
-    id: a.id,
-    login: a.login,
-    lastUsed: a.lastUsed,
-    requestCount: a.requestCount,
-    errorCount: a.errorCount,
-    lastError: a.lastError,
-    rateLimited: a.rateLimited,
-    rateLimitResetAt: a.rateLimitResetAt,
-    active: a.active,
-    paused: a.paused ?? false,
-    pausedReason: a.pausedReason,
-    quota: a.quota,
-  }))
+
+  // Filter out invalid accounts and dedupe by id
+  const seenIds = new Set<string>()
+  return poolState.accounts
+    .filter((a) => {
+      if (!a.id || seenIds.has(a.id)) return false
+      seenIds.add(a.id)
+      return true
+    })
+    .map((a) => ({
+      id: a.id,
+      login: a.login,
+      lastUsed: a.lastUsed,
+      requestCount: a.requestCount,
+      errorCount: a.errorCount,
+      lastError: a.lastError,
+      rateLimited: a.rateLimited,
+      rateLimitResetAt: a.rateLimitResetAt,
+      active: a.active,
+      paused: a.paused ?? false,
+      pausedReason: a.pausedReason,
+      quota: a.quota,
+    }))
 }
 
 export async function toggleAccountPause(
