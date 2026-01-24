@@ -73,13 +73,17 @@ async function loadHistory(): Promise<void> {
 
 let isSaving = false
 
+function setIsSaving(value: boolean): void {
+  isSaving = value
+}
+
 /**
  * Save history to disk
  */
 async function saveHistory(): Promise<void> {
   if (!isDirty || isSaving) return
 
-  isSaving = true
+  setIsSaving(true)
   isDirty = false
   try {
     await ensureDir()
@@ -90,8 +94,7 @@ async function saveHistory(): Promise<void> {
     isDirty ||= true
     consola.error("Failed to save request history:", error)
   } finally {
-    // eslint-disable-next-line require-atomic-updates -- isSaving is a mutex flag, always reset after async work
-    isSaving = false
+    setIsSaving(false)
   }
 }
 
