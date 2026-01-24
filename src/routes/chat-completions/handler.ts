@@ -78,11 +78,10 @@ function handleCachedResponse(
 ): Response | null {
   if (ctx.payload.stream) return null
 
-  const cacheKey = generateCacheKey(
-    ctx.payload.model,
-    ctx.payload.messages,
-    getCacheKeyOptions(ctx.payload),
-  )
+  const cacheKey = generateCacheKey(ctx.payload.model, ctx.payload.messages, {
+    ...getCacheKeyOptions(ctx.payload),
+    accountId: ctx.accountInfo ?? undefined,
+  })
 
   const cached = requestCache.get(cacheKey)
   if (!cached) return null
@@ -137,11 +136,10 @@ function handleNonStreamingResponse(
   )
   consola.debug(`Cost estimate: $${cost.totalCost.toFixed(6)}`)
 
-  const cacheKey = generateCacheKey(
-    ctx.payload.model,
-    ctx.payload.messages,
-    getCacheKeyOptions(ctx.payload),
-  )
+  const cacheKey = generateCacheKey(ctx.payload.model, ctx.payload.messages, {
+    ...getCacheKeyOptions(ctx.payload),
+    accountId: ctx.accountInfo ?? undefined,
+  })
   requestCache.set({
     key: cacheKey,
     response,
