@@ -165,6 +165,13 @@ async function initializeAccount(
       const copilot = await getCopilotToken(token)
       account.copilotToken = copilot.token
       account.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
+
+      // Fetch quota for new account
+      try {
+        await fetchAccountQuotaInternal(account, poolState)
+      } catch {
+        consola.debug(`Could not fetch initial quota for ${account.login}`)
+      }
     } catch (error) {
       consola.warn(`Account ${account.login} has no Copilot access:`, error)
       account.active = false
@@ -607,6 +614,13 @@ export async function addInitialAccount(
     const copilot = await getCopilotToken(token)
     account.copilotToken = copilot.token
     account.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
+
+    // Fetch quota for initial account
+    try {
+      await fetchAccountQuotaInternal(account, poolState)
+    } catch {
+      consola.debug(`Could not fetch initial quota for ${account.login}`)
+    }
   } catch (error) {
     consola.warn(
       `Initial account ${account.login} has no Copilot access:`,
