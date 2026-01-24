@@ -70,34 +70,86 @@ async function ensureDir(): Promise<void> {
 /**
  * Generate cache key from request
  */
-export function generateCacheKey(
-  model: string,
+type CacheKeyOptions = {
+  temperature?: number
+  max_tokens?: number
+  tools?: Array<unknown>
+  accountId?: string
+  top_p?: number
+  frequency_penalty?: number
+  presence_penalty?: number
+  seed?: number
+  stop?: string | Array<string> | null
+  response_format?: { type: "json_object" } | null
+  tool_choice?:
+    | "none"
+    | "auto"
+    | "required"
+    | { type: "function"; function: { name: string } }
+    | null
+  user?: string | null
+  logit_bias?: Record<string, number> | null
+  logprobs?: boolean | null
+  n?: number | null
+  stream?: boolean | null
+}
+
+function normalizeMessages(
   messages: Array<{ role: string; content: unknown }>,
-  options?: {
-    temperature?: number
-    max_tokens?: number
-    tools?: Array<unknown>
-    accountId?: string
-  },
-): string {
-  // Normalize messages (sort keys, remove undefined values)
-  const normalizedMessages = messages.map((msg) => ({
+): Array<{ role: string; content: string }> {
+  return messages.map((msg) => ({
     role: msg.role,
     content:
       typeof msg.content === "string" ?
         msg.content
       : JSON.stringify(msg.content),
   }))
+}
 
-  const payload = {
-    model,
-    messages: normalizedMessages,
-    temperature: options?.temperature,
-    max_tokens: options?.max_tokens,
-    accountId: options?.accountId,
-    // Include tools in hash if present
-    tools: options?.tools ? JSON.stringify(options.tools) : undefined,
+function getToolsHash(tools?: Array<unknown>): string | undefined {
+  return tools ? JSON.stringify(tools) : undefined
+}
+
+function buildOptionsPayload(options?: CacheKeyOptions) {
+  if (!options) return { tools: undefined }
+  return {
+    temperature: options.temperature,
+    max_tokens: options.max_tokens,
+    accountId: options.accountId,
+    top_p: options.top_p,
+    frequency_penalty: options.frequency_penalty,
+    presence_penalty: options.presence_penalty,
+    seed: options.seed,
+    stop: options.stop,
+    response_format: options.response_format,
+    tool_choice: options.tool_choice,
+    user: options.user,
+    logit_bias: options.logit_bias,
+    logprobs: options.logprobs,
+    n: options.n,
+    stream: options.stream,
+    tools: getToolsHash(options.tools),
   }
+}
+
+function buildCacheKeyPayload(
+  model: string,
+  messages: Array<{ role: string; content: unknown }>,
+  options?: CacheKeyOptions,
+) {
+  return {
+    model,
+    messages: normalizeMessages(messages),
+    ...buildOptionsPayload(options),
+  }
+}
+
+export function generateCacheKey(
+  model: string,
+  messages: Array<{ role: string; content: unknown }>,
+  options?: CacheKeyOptions,
+): string {
+  const payload = buildCacheKeyPayload(model, messages, options)
 
   const hash = crypto
     .createHash("sha256")

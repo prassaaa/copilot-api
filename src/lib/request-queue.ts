@@ -57,6 +57,7 @@ let queueConfig: QueueConfig = { ...DEFAULT_CONFIG }
 let queue: Array<QueuedRequest> = []
 let running = 0
 let paused = false
+const runningRequests: Map<string, QueuedRequest> = new Map()
 
 // Metrics
 let metrics: QueueMetrics = {
@@ -182,6 +183,7 @@ function processNext(): void {
 
   running++
   request.startedAt = Date.now()
+  runningRequests.set(request.id, request)
 
   // Calculate wait time
   const waitTime = request.startedAt - request.enqueuedAt
@@ -203,6 +205,17 @@ function processNext(): void {
 export function completeRequest(_requestId: string): void {
   running = Math.max(0, running - 1)
   metrics.totalProcessed++
+  const request = runningRequests.get(_requestId)
+  if (request?.startedAt) {
+    const duration = Date.now() - request.startedAt
+    const prevTotal = metrics.totalProcessed - 1
+    metrics.averageProcessTime =
+      prevTotal > 0 ?
+        (metrics.averageProcessTime * prevTotal + duration)
+        / metrics.totalProcessed
+      : duration
+    runningRequests.delete(_requestId)
+  }
 
   // Process next in queue
   processNext()
