@@ -446,6 +446,40 @@
                     </div>
                 </div>
 
+                <!-- Usage Summary -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
+                        <div class="text-gray-500 text-sm font-medium mb-2">Total Requests (24h)</div>
+                        <div class="text-3xl font-bold text-white" x-text="usageStats.totalRequests || 0"></div>
+                        <div class="text-xs text-gray-500 mt-2">
+                            Avg <span class="text-gray-300" x-text="avgRequestsPerMinute"></span>/min
+                        </div>
+                    </div>
+                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
+                        <div class="text-gray-500 text-sm font-medium mb-2">Top Model (24h)</div>
+                        <div class="text-lg font-bold text-neon-purple truncate" x-text="topModelUsage.model"></div>
+                        <div class="text-xs text-gray-500 mt-2">
+                            <span class="text-gray-300" x-text="topModelUsage.count"></span> reqs
+                            <span class="mx-1">•</span>
+                            <span class="text-gray-300" x-text="topModelUsage.percent + '%'"></span>
+                        </div>
+                    </div>
+                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
+                        <div class="text-gray-500 text-sm font-medium mb-2">Paused Accounts</div>
+                        <div class="text-3xl font-bold text-yellow-400" x-text="accountPool.accounts.filter(a => a.paused).length"></div>
+                        <div class="text-xs text-gray-500 mt-2">
+                            Active <span class="text-gray-300" x-text="accountPool.accounts.filter(a => a.active && !a.paused).length"></span>
+                        </div>
+                    </div>
+                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
+                        <div class="text-gray-500 text-sm font-medium mb-2">Premium Quota (All Accounts)</div>
+                        <div class="text-xl font-bold text-neon-cyan" x-text="premiumQuotaSummary.text"></div>
+                        <div class="text-xs text-gray-500 mt-2" x-show="premiumQuotaSummary.percent !== null">
+                            Remaining <span class="text-gray-300" x-text="premiumQuotaSummary.percent + '%'"></span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- All Accounts Quota -->
                 <div class="space-y-4">
                     <template x-for="account in accountPool.accounts" :key="account.id">

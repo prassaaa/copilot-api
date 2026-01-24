@@ -1462,6 +1462,57 @@ document.addEventListener("alpine:init", () => {
       return num.toString()
     },
 
+    get avgRequestsPerMinute() {
+      const total = this.usageStats.totalRequests || 0
+      return (total / 1440).toFixed(2)
+    },
+
+    get topModelUsage() {
+      const entries = Object.entries(this.usageStats.byModel || {})
+      if (entries.length === 0) {
+        return { model: "N/A", count: 0, percent: 0 }
+      }
+      const [model, count] = entries.sort((a, b) => b[1] - a[1])[0]
+      const total = this.usageStats.totalRequests || 0
+      const percent = total > 0 ? Math.round((count / total) * 100) : 0
+      return { model, count, percent }
+    },
+
+    get premiumQuotaSummary() {
+      const accounts = this.accountPool.accounts || []
+      if (accounts.length === 0) {
+        return { text: "N/A", percent: null }
+      }
+
+      let remaining = 0
+      let entitlement = 0
+      let hasUnlimited = false
+      let count = 0
+
+      for (const account of accounts) {
+        const premium = account?.quota?.premiumInteractions
+        if (!premium) continue
+        count++
+        if (premium.unlimited) {
+          hasUnlimited = true
+          continue
+        }
+        remaining += premium.remaining ?? 0
+        entitlement += premium.entitlement ?? 0
+      }
+
+      if (count === 0) {
+        return { text: "N/A", percent: null }
+      }
+
+      if (hasUnlimited) {
+        return { text: "Unlimited", percent: null }
+      }
+
+      const percent = entitlement > 0 ? Math.round((remaining / entitlement) * 100) : 0
+      return { text: `${remaining} / ${entitlement}`, percent }
+    },
+
     // Get quota color class based on percentage
     getQuotaColor(snapshot) {
       if (!snapshot || snapshot.unlimited) return "text-emerald-400"
