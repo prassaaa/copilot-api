@@ -146,14 +146,19 @@ async function savePoolState(): Promise<void> {
 }
 
 /**
- * Sync poolConfig.accounts to config.json
+ * Sync poolState.accounts to config.json
  * This ensures accounts persist across server restarts
  */
 async function syncAccountsToConfig(): Promise<void> {
   try {
     const config = getConfig()
     const currentTokens = new Set(config.poolAccounts.map((a) => a.token))
-    const poolTokens = poolConfig.accounts
+
+    // Get tokens from poolState.accounts (the actual loaded accounts)
+    const poolTokens = poolState.accounts.map((a) => ({
+      token: a.token,
+      label: a.login,
+    }))
 
     // Check if there are any new tokens to add
     const newAccounts = poolTokens.filter((a) => !currentTokens.has(a.token))
@@ -283,40 +288,57 @@ export async function initializePool(config: PoolConfig): Promise<void> {
   }
 
   if (!poolConfig.enabled || config.accounts.length === 0) {
+    // Even if pool is disabled, sync any existing accounts to config
+    if (poolState.accounts.length > 0) {
+      await syncAccountsToConfig()
+    }
     consola.debug("Account pool disabled or empty")
     return
   }
 
   consola.info(
-    `Initializing account pool with ${config.accounts.length} accounts...`,
+    `Initializing account pool with ${config.accounts.length} accounts from config...`,
   )
 
-  const newAccounts: Array<AccountStatus> = []
+  const processedTokens = new Set<string>()
+  const mergedAccounts: Array<AccountStatus> = []
 
+  // First, process accounts from config
   for (const acc of config.accounts) {
     const existing = poolState.accounts.find((a) => a.token === acc.token)
 
     if (existing) {
       await refreshAccountToken(existing)
-      newAccounts.push(existing)
+      mergedAccounts.push(existing)
     } else {
       const account = await initializeAccount(acc.token, acc.label)
       if (account) {
-        newAccounts.push(account)
+        mergedAccounts.push(account)
       }
+    }
+    processedTokens.add(acc.token)
+  }
+
+  // Then, add any accounts from poolState that weren't in config
+  for (const account of poolState.accounts) {
+    if (!processedTokens.has(account.token)) {
+      await refreshAccountToken(account)
+      mergedAccounts.push(account)
+      consola.info(`Restored account ${account.login} from saved state`)
     }
   }
 
-  // Assign all at once to avoid race condition
+  // Assign merged accounts
   poolState = {
     ...poolState,
-    accounts: newAccounts,
+    accounts: mergedAccounts,
   }
   await savePoolState()
+  await syncAccountsToConfig()
 
-  const activeCount = newAccounts.filter((a) => a.active).length
+  const activeCount = mergedAccounts.filter((a) => a.active).length
   consola.success(
-    `Account pool initialized: ${activeCount}/${newAccounts.length} active`,
+    `Account pool initialized: ${activeCount}/${mergedAccounts.length} active`,
   )
 }
 
