@@ -54,12 +54,11 @@ function buildCacheKeyOptions(payload: OpenAIPayload): {
   }
 }
 
-function getCacheKey(payload: OpenAIPayload): string {
-  return generateCacheKey(
-    payload.model,
-    payload.messages,
-    buildCacheKeyOptions(payload),
-  )
+function getCacheKey(payload: OpenAIPayload, accountId?: string): string {
+  return generateCacheKey(payload.model, payload.messages, {
+    ...buildCacheKeyOptions(payload),
+    accountId,
+  })
 }
 
 function estimateInputTokens(messages: OpenAIPayload["messages"]): number {
@@ -155,7 +154,7 @@ function handleNonStreamingResponse(params: {
   consola.debug(`Cost estimate: $${cost.totalCost.toFixed(6)}`)
 
   requestCache.set({
-    key: getCacheKey(openAIPayload),
+    key: getCacheKey(openAIPayload, accountInfo),
     response,
     model: openAIPayload.model,
     inputTokens: tokenState.input,
@@ -326,7 +325,7 @@ export async function handleCompletion(c: Context) {
   if (!anthropicPayload.stream) {
     const cachedResponse = handleCachedResponse({
       c,
-      cacheKey: getCacheKey(openAIPayload),
+      cacheKey: getCacheKey(openAIPayload, accountInfo),
       anthropicPayload,
       accountInfo,
       startTime,
@@ -343,6 +342,9 @@ export async function handleCompletion(c: Context) {
   const queueResult = await handleQueueIfNeeded(c, anthropicPayload)
   if (queueResult.response) {
     return queueResult.response
+  }
+  if (queueResult.requestId) {
+    requestId = queueResult.requestId
   }
 
   try {
