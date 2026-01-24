@@ -6,7 +6,7 @@ import consola from "consola"
 import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
-import { addInitialAccount } from "./lib/account-pool"
+import { addInitialAccount, getCurrentAccount } from "./lib/account-pool"
 import { loadConfig, saveConfig, type Config } from "./lib/config"
 import { costCalculator } from "./lib/cost-calculator"
 import { logEmitter } from "./lib/logger"
@@ -211,9 +211,13 @@ export async function runServer(options: RunServerOptions): Promise<void> {
   )
 
   logEmitter.log("success", `Server started on ${serverUrl}`)
+
+  // Get user from pool account first, fallback to state.githubUser
+  const currentUser =
+    getCurrentAccount()?.login || state.githubUser?.login || "Unknown"
   logEmitter.log(
     "info",
-    `User: ${state.githubUser?.login || "Unknown"}, Models: ${state.models?.data.length || 0}`,
+    `User: ${currentUser}, Models: ${state.models?.data.length || 0}`,
   )
 
   serve({
