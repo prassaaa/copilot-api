@@ -157,6 +157,16 @@ async function setupGitHubAuth(
       state.githubToken = poolToken
       consola.info("Using pooled GitHub token for Copilot bootstrap")
     }
+    // Sync state.githubUser from current account in pool
+    const currentAccount = getCurrentAccount()
+    if (currentAccount) {
+      state.githubUser = {
+        login: currentAccount.login,
+        id: Number(currentAccount.id) || 0,
+      }
+      state.githubToken = currentAccount.token
+      consola.info(`Current pool account: ${currentAccount.login}`)
+    }
   } else if (options.githubToken) {
     state.githubToken = options.githubToken
     consola.info("Using provided GitHub token")
