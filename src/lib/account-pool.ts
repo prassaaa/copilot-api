@@ -28,11 +28,13 @@ import { state } from "./state"
  */
 function syncGlobalStateToAccount(account: AccountStatus | null): void {
   if (account) {
-    state.githubUser = { login: account.login, id: Number(account.id) }
+    state.githubUser = { login: account.login, id: Number(account.id) || 0 }
     state.githubToken = account.token
+    consola.debug(`Synced global state to account: ${account.login}`)
   } else {
     state.githubUser = undefined
     state.githubToken = undefined
+    consola.debug("Cleared global state (no account)")
   }
 }
 
@@ -929,8 +931,13 @@ export async function setCurrentAccount(
   const account = poolState.accounts.find((a) => a.id === accountId)
 
   if (!account) {
+    consola.warn(`setCurrentAccount: Account ${accountId} not found`)
     return { success: false }
   }
+
+  consola.debug(
+    `setCurrentAccount: Setting current to ${account.login} (id: ${account.id})`,
+  )
 
   // Set this account as the sticky and last selected account
   poolState.stickyAccountId = accountId
