@@ -20,6 +20,21 @@ import {
   refreshAllQuotas as refreshAllQuotasInternal,
 } from "./account-pool-quota"
 import { getConfig, saveConfig } from "./config"
+import { state } from "./state"
+
+/**
+ * Update global state to reflect the current account's user info.
+ * This syncs the account pool's active account with the display state.
+ */
+function syncGlobalStateToAccount(account: AccountStatus | null): void {
+  if (account) {
+    state.githubUser = { login: account.login, id: Number(account.id) }
+    state.githubToken = account.token
+  } else {
+    state.githubUser = undefined
+    state.githubToken = undefined
+  }
+}
 
 export type SelectionStrategy =
   | "sticky"
@@ -564,6 +579,7 @@ async function rotateToNextAccount({
       (a) => a.id === nextAccount.id,
     )
     poolState.lastAutoRotationAt = Date.now()
+    syncGlobalStateToAccount(nextAccount)
     await notifyAccountRotation(account.login, nextAccount.login, reason)
   }
 }
@@ -592,7 +608,6 @@ export async function reportAccountError(
     await notifyAuthError(account.login)
   }
 
-  // Auto-rotate to next account based on config
   const config = await import("./config").then((m) => m.getConfig())
   const doRotate =
     shouldAutoRotate(errorType, account.errorCount, config)
@@ -606,11 +621,10 @@ export async function reportAccountError(
         (a) => a.id === nextAccount.id,
       )
       poolState.lastAutoRotationAt = Date.now()
-
+      syncGlobalStateToAccount(nextAccount)
       consola.info(
         `Auto-rotated from ${previousAccount} to ${nextAccount.login}`,
       )
-
       await notifyAccountRotation(previousAccount, nextAccount.login, errorType)
     } else {
       poolState.stickyAccountId = undefined
@@ -625,10 +639,7 @@ function findNextAvailableAccount(excludeId: string): AccountStatus | null {
   const availableAccounts = poolState.accounts.filter(
     (a) => a.id !== excludeId && a.active && !a.rateLimited && !a.paused,
   )
-
   if (availableAccounts.length === 0) return null
-
-  // Use quota-based selection for auto-rotation
   return availableAccounts.reduce((best, current) => {
     const bestQuota = getEffectiveQuotaPercent(best)
     const currentQuota = getEffectiveQuotaPercent(current)
@@ -642,7 +653,6 @@ export async function addAccount(
 ): Promise<AccountStatus | null> {
   await ensurePoolStateLoaded()
 
-  // Check if already exists
   if (poolState.accounts.some((a) => a.token === token)) {
     consola.warn("Account already in pool")
     return null
@@ -652,13 +662,10 @@ export async function addAccount(
   if (account) {
     poolState.accounts.push(account)
     poolConfig.accounts.push({ token, label })
-
-    // Auto-enable pool when account is added
     if (!poolConfig.enabled) {
       poolConfig.enabled = true
       consola.info("Account pool auto-enabled")
     }
-
     await savePoolState()
     await syncAccountsToConfig()
     consola.success(`Account ${account.login} added to pool`)
@@ -673,21 +680,19 @@ export async function addInitialAccount(
 ): Promise<AccountStatus | null> {
   await ensurePoolStateLoaded()
 
-  // Check if already exists
   const existingAccount = poolState.accounts.find((a) => a.token === token)
   if (existingAccount) {
     consola.debug("Initial account already in pool")
     // Sync sticky account to the logged-in account
-    // This ensures the account shown at startup matches the active account
     if (poolState.stickyAccountId !== existingAccount.id) {
       poolState.stickyAccountId = existingAccount.id
+      syncGlobalStateToAccount(existingAccount)
       await savePoolState()
       consola.info(`Switched active account to ${existingAccount.login}`)
     }
     return existingAccount
   }
 
-  // Create account status directly since we already have user info
   const account: AccountStatus = {
     id: userInfo.login,
     login: userInfo.login,
@@ -698,13 +703,11 @@ export async function addInitialAccount(
     active: true,
   }
 
-  // Try to get Copilot token
   try {
     const copilot = await getCopilotToken(token)
     account.copilotToken = copilot.token
     account.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
 
-    // Fetch quota for initial account
     try {
       const quota = await fetchAccountQuotaInternal(account, poolState)
       if (quota) {
@@ -722,13 +725,10 @@ export async function addInitialAccount(
     account.lastError = "No Copilot access"
   }
 
-  poolState.accounts.unshift(account) // Add to beginning
+  poolState.accounts.unshift(account)
   poolConfig.accounts.unshift({ token, label: userInfo.login })
-
-  // Set as sticky account so it becomes the active account
   poolState.stickyAccountId = account.id
 
-  // Auto-enable pool when first account is added
   if (!poolConfig.enabled) {
     poolConfig.enabled = true
     consola.info("Account pool auto-enabled")
@@ -755,7 +755,12 @@ export async function removeAccount(
   )
 
   if (poolState.stickyAccountId === id) {
-    poolState.stickyAccountId = undefined
+    // Update global state to the next available account or clear it
+    const nextAccount = poolState.accounts.find(
+      (a) => a.active && !a.rateLimited && !a.paused,
+    )
+    poolState.stickyAccountId = nextAccount?.id
+    syncGlobalStateToAccount(nextAccount ?? null)
   }
 
   await savePoolState()
@@ -930,6 +935,7 @@ export async function setCurrentAccount(
   // Set this account as the sticky and last selected account
   poolState.stickyAccountId = accountId
   poolState.lastSelectedId = accountId
+  syncGlobalStateToAccount(account)
 
   await savePoolState()
 
