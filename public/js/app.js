@@ -455,7 +455,7 @@ document.addEventListener("alpine:init", () => {
           // Also update serverInfo from status
           this.serverInfo.version = data.version || this.serverInfo.version
           this.serverInfo.uptime = data.uptime || this.serverInfo.uptime
-          this.serverInfo.user = data.user || this.serverInfo.user
+          this.serverInfo.user = data.user
           this.serverInfo.configPath = data.configPath || this.serverInfo.configPath
           this.serverInfo.claudeConfigPath = data.claudeConfigPath || this.serverInfo.claudeConfigPath
         }
@@ -704,6 +704,8 @@ document.addEventListener("alpine:init", () => {
         if (data.status === "ok") {
           this.accountPool.accounts = data.accounts
           this.accountPool.currentAccountId = data.currentAccountId
+          // Refresh status to update user display
+          await this.fetchStatus()
           this.showToast(`Account ${id} set as current`, "success")
         } else {
           throw new Error(data.error)
