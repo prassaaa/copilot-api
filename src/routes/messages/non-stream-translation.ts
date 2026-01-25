@@ -78,12 +78,16 @@ function handleSystemPrompt(
     return []
   }
 
-  if (typeof system === "string") {
-    return [{ role: "system", content: system }]
-  } else {
-    const systemText = system.map((block) => block.text).join("\n\n")
-    return [{ role: "system", content: systemText }]
-  }
+  let systemText: string =
+    typeof system === "string" ? system : (
+      system.map((block) => block.text).join("\n\n")
+    )
+
+  // Remove x-anthropic-billing-header from system prompt
+  // Claude Code injects this header which Copilot API doesn't accept
+  systemText = systemText.replace(/^x-anthropic-billing-header:.*\n\n/m, "")
+
+  return [{ role: "system", content: systemText }]
 }
 
 function handleUserMessage(message: AnthropicUserMessage): Array<Message> {
