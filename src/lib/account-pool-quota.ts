@@ -2,7 +2,11 @@ import consola from "consola"
 
 import { getCopilotUsageForAccount } from "~/services/github/get-copilot-usage"
 
-import type { AccountQuota, AccountStatus, PoolState } from "./account-pool"
+import type {
+  AccountQuota,
+  AccountStatus,
+  PoolState,
+} from "./account-pool-types"
 
 import { notifyQuotaLow } from "./account-pool-notify"
 

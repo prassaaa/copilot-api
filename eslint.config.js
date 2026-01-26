@@ -7,10 +7,4 @@ export default [
     },
     ignores: ["public/**", "pages/**"],
   }),
-  {
-    files: ["src/lib/account-pool.ts"],
-    rules: {
-      "max-lines": ["error", { max: 1000 }],
-    },
-  },
 ]

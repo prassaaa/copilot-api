@@ -1,10 +1,13 @@
 import consola from "consola"
-import fs from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
 
 import { getCopilotToken } from "~/services/github/get-copilot-token"
 import { getGitHubUser } from "~/services/github/get-user"
+
+import type {
+  AccountQuota,
+  AccountStatus,
+  PoolConfig,
+} from "./account-pool-types"
 
 import {
   notifyAccountRotation,
@@ -15,12 +18,36 @@ import {
   checkAndAutoPauseAccounts as checkAndAutoPauseAccountsInternal,
   checkMonthlyReset as checkMonthlyResetInternal,
   fetchAccountQuota as fetchAccountQuotaInternal,
-  getEffectiveQuotaPercent,
   needsQuotaRefresh,
   refreshAllQuotas as refreshAllQuotasInternal,
 } from "./account-pool-quota"
+import {
+  findNextAvailableAccount,
+  selectAccount,
+} from "./account-pool-selection"
+import {
+  ensurePoolStateLoaded,
+  isPoolStateLoaded,
+  loadPoolState,
+  markPoolStateLoaded,
+  poolConfig,
+  poolState,
+  savePoolState,
+  setPoolConfig,
+  setPoolState,
+  syncAccountsToConfig,
+} from "./account-pool-store"
 import { getConfig, saveConfig } from "./config"
 import { state } from "./state"
+
+export { getCurrentAccount, selectAccount } from "./account-pool-selection"
+
+export type {
+  AccountQuota,
+  AccountStatus,
+  PoolConfig,
+  SelectionStrategy,
+} from "./account-pool-types"
 
 /**
  * Update global state to reflect the current account's user info.
@@ -35,165 +62,6 @@ function syncGlobalStateToAccount(account: AccountStatus | null): void {
     state.githubUser = undefined
     state.githubToken = undefined
     consola.debug("Cleared global state (no account)")
-  }
-}
-
-export type SelectionStrategy =
-  | "sticky"
-  | "round-robin"
-  | "hybrid"
-  | "quota-based"
-
-export interface AccountQuota {
-  chat: {
-    remaining: number
-    entitlement: number
-    percentRemaining: number
-    unlimited: boolean
-  }
-  completions: {
-    remaining: number
-    entitlement: number
-    percentRemaining: number
-    unlimited: boolean
-  }
-  premiumInteractions: {
-    remaining: number
-    entitlement: number
-    percentRemaining: number
-    unlimited: boolean
-  }
-  resetDate?: string
-  lastFetched?: number
-}
-
-export interface AccountStatus {
-  id: string
-  login: string
-  token: string // GitHub access token
-  copilotToken?: string // Copilot API token
-  copilotTokenExpires?: number
-  lastUsed?: number
-  requestCount: number
-  errorCount: number
-  lastError?: string
-  rateLimited: boolean
-  rateLimitResetAt?: number
-  active: boolean
-  paused?: boolean // User manually paused the account
-  pausedReason?: "manual" | "quota" // Why the account is paused
-  quota?: AccountQuota // Quota information
-}
-
-export interface PoolConfig {
-  enabled: boolean
-  strategy: SelectionStrategy
-  accounts: Array<{ token: string; label?: string }>
-}
-
-export interface PoolState {
-  accounts: Array<AccountStatus>
-  currentIndex: number
-  stickyAccountId?: string
-  lastSelectedId?: string
-  lastAutoRotationAt?: number
-  config?: {
-    enabled: boolean
-    strategy: SelectionStrategy
-  }
-}
-
-const CONFIG_DIR = path.join(os.homedir(), ".config", "copilot-api")
-const POOL_FILE = path.join(CONFIG_DIR, "account-pool.json")
-
-let poolState: PoolState = {
-  accounts: [],
-  currentIndex: 0,
-}
-
-let poolConfig: PoolConfig = {
-  enabled: false,
-  strategy: "sticky",
-  accounts: [],
-}
-
-async function ensureDir(): Promise<void> {
-  try {
-    await fs.mkdir(CONFIG_DIR, { recursive: true })
-  } catch {
-    // Directory exists
-  }
-}
-
-async function loadPoolState(): Promise<void> {
-  try {
-    await ensureDir()
-    const data = await fs.readFile(POOL_FILE)
-    const saved = JSON.parse(data.toString()) as Partial<PoolState>
-    poolState = {
-      accounts: saved.accounts ?? [],
-      currentIndex: saved.currentIndex ?? 0,
-      stickyAccountId: saved.stickyAccountId,
-      lastSelectedId: saved.lastSelectedId,
-      lastAutoRotationAt: saved.lastAutoRotationAt,
-    }
-    if (saved.config) {
-      poolConfig.enabled = saved.config.enabled
-      poolConfig.strategy = saved.config.strategy
-    }
-    consola.debug(
-      `loadPoolState: loaded ${poolState.accounts.length} accounts from file`,
-    )
-  } catch {
-    // File doesn't exist, use defaults
-    consola.debug("loadPoolState: no file found, using defaults")
-  }
-}
-
-async function savePoolState(): Promise<void> {
-  try {
-    await ensureDir()
-    const stateToSave = {
-      ...poolState,
-      config: {
-        enabled: poolConfig.enabled,
-        strategy: poolConfig.strategy,
-      },
-    }
-    await fs.writeFile(POOL_FILE, JSON.stringify(stateToSave, null, 2))
-  } catch (error) {
-    consola.error("Failed to save pool state:", error)
-  }
-}
-
-/**
- * Sync poolState.accounts to config.json
- * This ensures accounts persist across server restarts
- */
-async function syncAccountsToConfig(): Promise<void> {
-  try {
-    const config = getConfig()
-    const currentTokens = new Set(config.poolAccounts.map((a) => a.token))
-
-    // Get tokens from poolState.accounts (the actual loaded accounts)
-    const poolTokens = poolState.accounts.map((a) => ({
-      token: a.token,
-      label: a.login,
-    }))
-
-    // Check if there are any new tokens to add
-    const newAccounts = poolTokens.filter((a) => !currentTokens.has(a.token))
-
-    if (newAccounts.length > 0) {
-      await saveConfig({
-        poolEnabled: poolConfig.enabled,
-        poolStrategy: poolConfig.strategy,
-        poolAccounts: [...config.poolAccounts, ...newAccounts],
-      })
-      consola.debug(`Synced ${newAccounts.length} account(s) to config`)
-    }
-  } catch (error) {
-    consola.error("Failed to sync accounts to config:", error)
   }
 }
 
@@ -241,18 +109,6 @@ async function initializeAccount(
   }
 }
 
-let poolStateLoaded = false
-function markPoolStateLoaded(): void {
-  poolStateLoaded = true
-}
-
-async function ensurePoolStateLoaded(): Promise<void> {
-  if (!poolStateLoaded) {
-    await loadPoolState()
-    markPoolStateLoaded()
-  }
-}
-
 function updateAccountToken(
   account: AccountStatus,
   copilotToken: string,
@@ -289,11 +145,11 @@ export async function initializePool(config: PoolConfig): Promise<void> {
   const savedEnabled = poolConfig.enabled
   const savedStrategy = poolConfig.strategy
 
-  poolConfig = {
+  setPoolConfig({
     ...config,
     enabled: savedEnabled || config.enabled,
     strategy: savedStrategy !== "sticky" ? savedStrategy : config.strategy,
-  }
+  })
 
   // If no accounts in config but we have saved accounts, use those
   if (config.accounts.length === 0 && poolState.accounts.length > 0) {
@@ -353,10 +209,10 @@ export async function initializePool(config: PoolConfig): Promise<void> {
   consola.debug(
     `initializePool: mergedAccounts=${mergedAccounts.length}, from config=${config.accounts.length}, from poolState=${poolState.accounts.length}`,
   )
-  poolState = {
+  setPoolState({
     ...poolState,
     accounts: mergedAccounts,
-  }
+  })
   await savePoolState()
   await syncAccountsToConfig()
 
@@ -364,113 +220,6 @@ export async function initializePool(config: PoolConfig): Promise<void> {
   consola.success(
     `Account pool initialized: ${activeCount}/${mergedAccounts.length} active`,
   )
-}
-
-function resetExpiredRateLimits(): AccountStatus | null {
-  const now = Date.now()
-  for (const account of poolState.accounts) {
-    if (
-      account.rateLimited
-      && account.rateLimitResetAt
-      && account.rateLimitResetAt <= now
-      && !account.paused
-    ) {
-      account.rateLimited = false
-      account.rateLimitResetAt = undefined
-      if (account.active) {
-        return account
-      }
-    }
-  }
-  return null
-}
-
-function selectStickyAccount(
-  activeAccounts: Array<AccountStatus>,
-): AccountStatus {
-  if (poolState.stickyAccountId) {
-    const sticky = activeAccounts.find(
-      (a) => a.id === poolState.stickyAccountId,
-    )
-    if (sticky) return sticky
-  }
-  const selected = activeAccounts[0]
-  poolState.stickyAccountId = selected.id
-  return selected
-}
-
-function selectRoundRobinAccount(
-  activeAccounts: Array<AccountStatus>,
-): AccountStatus {
-  const index = poolState.currentIndex % activeAccounts.length
-  poolState.currentIndex = (poolState.currentIndex + 1) % activeAccounts.length
-  return activeAccounts[index]
-}
-
-export function selectAccount(): AccountStatus | null {
-  if (!poolConfig.enabled || poolState.accounts.length === 0) {
-    return null
-  }
-
-  const activeAccounts = poolState.accounts.filter(
-    (a) => a.active && !a.rateLimited && !a.paused,
-  )
-
-  if (activeAccounts.length === 0) {
-    const resetAccount = resetExpiredRateLimits()
-    if (resetAccount) {
-      poolState.lastSelectedId = resetAccount.id
-      return resetAccount
-    }
-
-    consola.warn("No active accounts available in pool")
-    return null
-  }
-
-  let selected: AccountStatus
-
-  switch (poolConfig.strategy) {
-    case "sticky": {
-      selected = selectStickyAccount(activeAccounts)
-      break
-    }
-
-    case "round-robin": {
-      selected = selectRoundRobinAccount(activeAccounts)
-      break
-    }
-
-    case "quota-based": {
-      selected = selectByQuota(activeAccounts)
-      break
-    }
-
-    case "hybrid": {
-      // Sticky but rotate on error
-      if (poolState.stickyAccountId) {
-        const sticky = activeAccounts.find(
-          (a) => a.id === poolState.stickyAccountId,
-        )
-        if (sticky) {
-          selected = sticky
-          break
-        }
-      }
-      const nextAccount =
-        activeAccounts[poolState.currentIndex % activeAccounts.length]
-      poolState.stickyAccountId = nextAccount.id
-      selected = nextAccount
-      break
-    }
-
-    default: {
-      selected = activeAccounts[0]
-      break
-    }
-  }
-
-  poolState.lastSelectedId = selected.id
-  return selected
 }
 
 export async function getPooledCopilotToken(): Promise<string | null> {
@@ -637,18 +386,6 @@ export async function reportAccountError(
   await savePoolState()
 }
 
-function findNextAvailableAccount(excludeId: string): AccountStatus | null {
-  const availableAccounts = poolState.accounts.filter(
-    (a) => a.id !== excludeId && a.active && !a.rateLimited && !a.paused,
-  )
-  if (availableAccounts.length === 0) return null
-  return availableAccounts.reduce((best, current) => {
-    const bestQuota = getEffectiveQuotaPercent(best)
-    const currentQuota = getEffectiveQuotaPercent(current)
-    return currentQuota > bestQuota ? current : best
-  })
-}
-
 export async function addAccount(
   token: string,
   label?: string,
@@ -787,7 +524,7 @@ export async function getAccountsStatus(): Promise<
 > {
   await ensurePoolStateLoaded()
   consola.debug(
-    `getAccountsStatus: poolStateLoaded=${poolStateLoaded}, accounts=${poolState.accounts.length}`,
+    `getAccountsStatus: poolStateLoaded=${isPoolStateLoaded()}, accounts=${poolState.accounts.length}`,
   )
 
   // Filter out invalid accounts and dedupe by id
@@ -862,30 +599,6 @@ export function isPoolEnabledSync(): boolean {
   return poolConfig.enabled && poolState.accounts.length > 0
 }
 
-export function getCurrentAccount(): AccountStatus | null {
-  const activeAccounts = poolState.accounts.filter(
-    (a) => a.active && !a.rateLimited && !a.paused,
-  )
-
-  if (activeAccounts.length === 0) return null
-
-  if (poolState.lastSelectedId) {
-    const lastSelected = activeAccounts.find(
-      (a) => a.id === poolState.lastSelectedId,
-    )
-    if (lastSelected) return lastSelected
-  }
-
-  if (poolState.stickyAccountId) {
-    const sticky = activeAccounts.find(
-      (a) => a.id === poolState.stickyAccountId,
-    )
-    if (sticky) return sticky
-  }
-
-  return activeAccounts[0]
-}
-
 export async function refreshAllTokens(): Promise<void> {
   for (const account of poolState.accounts) {
     try {
@@ -947,14 +660,4 @@ export async function setCurrentAccount(
   await savePoolState()
 
   return { success: true, account }
-}
-
-function selectByQuota(activeAccounts: Array<AccountStatus>): AccountStatus {
-  // Sort by effective quota percentage (descending)
-  const sorted = [...activeAccounts].sort((a, b) => {
-    const aQuota = getEffectiveQuotaPercent(a)
-    const bQuota = getEffectiveQuotaPercent(b)
-    return bQuota - aQuota
-  })
-  return sorted[0]
 }
