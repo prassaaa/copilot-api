@@ -235,64 +235,89 @@ export async function getPooledCopilotToken(): Promise<string | null> {
   // Check for monthly reset first
   checkMonthlyReset()
 
-  const account = selectAccount()
-  if (!account) return null
+  // Maximum attempts to prevent infinite loops (use account count + 1 as reasonable limit)
+  const maxAttempts = poolState.accounts.length + 1
+  let attempts = 0
+  const triedAccounts = new Set<string>()
 
-  // Refresh token if needed
-  if (
-    !account.copilotToken
-    || !account.copilotTokenExpires
-    || Date.now() > account.copilotTokenExpires - 60000
-  ) {
-    try {
-      const copilot = await getCopilotToken(account.token)
-      account.copilotToken = copilot.token
-      account.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
-      savePoolState()
-    } catch (error) {
-      consola.error(`Failed to refresh token for ${account.login}:`, error)
-      account.active = false
-      account.lastError = String(error)
-      invalidateActiveAccountsCache()
-      savePoolState()
-      // Try next account
-      return getPooledCopilotToken()
+  while (attempts < maxAttempts) {
+    attempts++
+
+    const account = selectAccount()
+    if (!account) return null
+
+    // Skip accounts we've already tried this round
+    if (triedAccounts.has(account.id)) {
+      consola.debug(
+        `Already tried account ${account.login}, no more accounts available`,
+      )
+      return null
     }
-  }
+    triedAccounts.add(account.id)
 
-  // Refresh quota if needed (async, don't block request)
-  if (needsQuotaRefresh(account)) {
-    void fetchAccountQuota(account).then(() => {
-      checkAndAutoPauseAccounts()
-      savePoolState()
-    })
-  }
-
-  const isFirstUse = !account.lastUsed
-  account.lastUsed = Date.now()
-  account.requestCount++
-
-  try {
-    const config = await import("./config").then((m) => m.getConfig())
-    const requestLimit = config.autoRotationTriggers.requestCount
+    // Refresh token if needed
     if (
-      config.autoRotationEnabled
-      && requestLimit > 0
-      && account.requestCount >= requestLimit
+      !account.copilotToken
+      || !account.copilotTokenExpires
+      || Date.now() > account.copilotTokenExpires - 60000
     ) {
-      await rotateToNextAccount({ account, reason: "request-count" })
-      account.requestCount = 0
+      try {
+        const copilot = await getCopilotToken(account.token)
+        account.copilotToken = copilot.token
+        account.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
+        // Reset error count on successful token refresh
+        if (account.errorCount > 0) {
+          account.errorCount = Math.max(0, account.errorCount - 1)
+        }
+        savePoolState()
+      } catch (error) {
+        consola.error(`Failed to refresh token for ${account.login}:`, error)
+        account.active = false
+        account.lastError = String(error)
+        invalidateActiveAccountsCache()
+        savePoolState()
+        // Try next account (continue loop instead of recursive call)
+        continue
+      }
     }
-  } catch {
-    // Ignore rotation errors
+
+    // Refresh quota if needed (async, don't block request)
+    if (needsQuotaRefresh(account)) {
+      void fetchAccountQuota(account).then(() => {
+        checkAndAutoPauseAccounts()
+        savePoolState()
+      })
+    }
+
+    const isFirstUse = !account.lastUsed
+    account.lastUsed = Date.now()
+    account.requestCount++
+
+    try {
+      const config = await import("./config").then((m) => m.getConfig())
+      const requestLimit = config.autoRotationTriggers.requestCount
+      if (
+        config.autoRotationEnabled
+        && requestLimit > 0
+        && account.requestCount >= requestLimit
+      ) {
+        await rotateToNextAccount({ account, reason: "request-count" })
+        account.requestCount = 0
+      }
+    } catch {
+      // Ignore rotation errors
+    }
+
+    // Save state on first use or periodically (every 10 requests) to avoid too many writes
+    if (isFirstUse || account.requestCount % 10 === 0) {
+      savePoolState()
+    }
+
+    return account.copilotToken
   }
 
-  // Save state on first use or periodically (every 10 requests) to avoid too many writes
-  if (isFirstUse || account.requestCount % 10 === 0) {
-    savePoolState()
-  }
-
-  return account.copilotToken
+  consola.error("All accounts exhausted, no valid token available")
+  return null
 }
 
 function shouldAutoRotate(

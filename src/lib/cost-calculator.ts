@@ -9,6 +9,8 @@ import os from "node:os"
 import path from "node:path"
 
 import { getConfig } from "./config"
+import { registerInterval } from "./intervals"
+import { registerShutdownHandler } from "./shutdown"
 // Model pricing (per 1M tokens in USD)
 export interface ModelPricing {
   model: string
@@ -218,8 +220,11 @@ const HISTORY_RETENTION_DAYS = 30
 async function ensureDir(): Promise<void> {
   try {
     await fs.mkdir(CONFIG_DIR, { recursive: true })
-  } catch {
-    // Directory exists
+  } catch (error) {
+    // Only ignore EEXIST, log other errors
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      consola.warn("Failed to create cost history directory:", error)
+    }
   }
 }
 
@@ -481,17 +486,16 @@ export async function initCostCalculator(): Promise<void> {
   await loadHistory()
 
   // Auto-save every 5 minutes
-  setInterval(
+  const intervalId = setInterval(
     () => {
       void saveHistory()
     },
     5 * 60 * 1000,
   )
+  registerInterval("cost-calculator-autosave", intervalId)
 
-  // Save on process exit
-  process.on("beforeExit", () => {
-    void saveHistory()
-  })
+  // Register shutdown handler
+  registerShutdownHandler("cost-calculator", saveHistory, 20)
 
   consola.debug("Cost calculator initialized")
 }
