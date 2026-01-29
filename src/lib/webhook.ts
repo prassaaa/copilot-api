@@ -9,6 +9,7 @@ import os from "node:os"
 import path from "node:path"
 
 import { getConfig } from "./config"
+import { registerShutdownHandler } from "./shutdown"
 
 export type WebhookProvider = "discord" | "slack" | "custom"
 
@@ -58,14 +59,21 @@ let webhookConfig: WebhookConfig = {
 let webhookHistory: Array<WebhookHistoryEntry> = []
 const MAX_HISTORY = 100
 
+// Debounce timer for saving
+let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const SAVE_DEBOUNCE_MS = 1000
+
 /**
  * Ensure config directory exists
  */
 async function ensureDir(): Promise<void> {
   try {
     await fs.mkdir(CONFIG_DIR, { recursive: true })
-  } catch {
-    // Directory exists
+  } catch (error) {
+    // Only ignore EEXIST, log other errors
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      consola.warn("Failed to create webhook directory:", error)
+    }
   }
 }
 
@@ -83,9 +91,24 @@ async function loadHistory(): Promise<void> {
 }
 
 /**
- * Save webhook history to disk
+ * Save webhook history to disk (debounced)
  */
-async function saveHistory(): Promise<void> {
+function saveHistory(): void {
+  // Clear existing timer
+  if (saveDebounceTimer) {
+    clearTimeout(saveDebounceTimer)
+  }
+
+  // Set new debounced save
+  saveDebounceTimer = setTimeout(() => {
+    void saveHistoryImmediate()
+  }, SAVE_DEBOUNCE_MS)
+}
+
+/**
+ * Save webhook history immediately
+ */
+async function saveHistoryImmediate(): Promise<void> {
   try {
     await ensureDir()
     // Keep only recent entries
@@ -273,7 +296,7 @@ function recordWebhookResult(options: WebhookResultOptions): void {
     success: options.success,
     error: options.error,
   })
-  void saveHistory()
+  saveHistory()
 }
 
 /**
@@ -417,7 +440,7 @@ export function getWebhookHistory(): Array<WebhookHistoryEntry> {
  */
 export function clearWebhookHistory(): void {
   webhookHistory = []
-  void saveHistory()
+  saveHistory()
 }
 
 /**
@@ -449,6 +472,9 @@ export async function initWebhook(): Promise<void> {
   }
 
   await loadHistory()
+
+  // Register shutdown handler for immediate save
+  registerShutdownHandler("webhook", saveHistoryImmediate, 20)
 
   consola.debug(
     `Webhook module initialized: enabled=${webhookConfig.enabled}, provider=${webhookConfig.provider}`,

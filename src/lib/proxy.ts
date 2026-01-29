@@ -2,12 +2,33 @@ import consola from "consola"
 import { getProxyForUrl } from "proxy-from-env"
 import { Agent, ProxyAgent, setGlobalDispatcher, type Dispatcher } from "undici"
 
+import { registerShutdownHandler } from "./shutdown"
+
 export function initProxyFromEnv(): void {
   if (typeof Bun !== "undefined") return
 
   try {
     const direct = new Agent()
     const proxies = new Map<string, ProxyAgent>()
+
+    // Register shutdown handler to close all agents
+    registerShutdownHandler(
+      "proxy-agents",
+      async () => {
+        consola.debug(`Closing ${proxies.size} proxy agents...`)
+        const closePromises: Array<Promise<void>> = []
+
+        for (const agent of proxies.values()) {
+          closePromises.push(agent.close())
+        }
+        closePromises.push(direct.close())
+
+        await Promise.allSettled(closePromises)
+        proxies.clear()
+        consola.debug("Proxy agents closed")
+      },
+      80,
+    )
 
     // We only need a minimal dispatcher that implements `dispatch` at runtime.
     // Typing the object as `Dispatcher` forces TypeScript to require many
