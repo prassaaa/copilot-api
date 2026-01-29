@@ -12,6 +12,19 @@ export class HTTPError extends Error {
   }
 }
 
+/**
+ * Safely get error message from unknown error
+ */
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === "string") {
+    return error
+  }
+  return String(error)
+}
+
 export async function forwardError(c: Context, error: unknown) {
   consola.error("Error occurred:", error)
 
@@ -38,7 +51,7 @@ export async function forwardError(c: Context, error: unknown) {
   return c.json(
     {
       error: {
-        message: (error as Error).message,
+        message: getErrorMessage(error),
         type: "error",
       },
     },

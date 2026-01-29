@@ -83,14 +83,35 @@ const CONFIG_FILE = path.join(CONFIG_DIR, "config.json")
 // In-memory config
 let config: Config = { ...DEFAULT_CONFIG }
 
+// Mutex for config file operations
+let configMutex = Promise.resolve()
+
+async function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  const release = configMutex
+  let resolver: (() => void) | undefined
+  configMutex = new Promise((r) => {
+    resolver = r
+  })
+
+  await release
+  try {
+    return await fn()
+  } finally {
+    if (resolver) resolver()
+  }
+}
+
 /**
  * Ensure config directory exists
  */
 async function ensureConfigDir(): Promise<void> {
   try {
     await fs.mkdir(CONFIG_DIR, { recursive: true })
-  } catch {
-    // Directory already exists
+  } catch (error) {
+    // Only ignore EEXIST, log other errors
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      consola.warn("Failed to create config directory:", error)
+    }
   }
 }
 
@@ -98,44 +119,48 @@ async function ensureConfigDir(): Promise<void> {
  * Load configuration from file
  */
 export async function loadConfig(): Promise<Config> {
-  try {
-    await ensureConfigDir()
+  return withConfigLock(async () => {
+    try {
+      await ensureConfigDir()
 
-    const fileContent = await fs.readFile(CONFIG_FILE)
-    const userConfig = JSON.parse(fileContent.toString()) as Partial<Config>
-    config = { ...DEFAULT_CONFIG, ...userConfig }
+      const fileContent = await fs.readFile(CONFIG_FILE)
+      const userConfig = JSON.parse(fileContent.toString()) as Partial<Config>
+      config = { ...DEFAULT_CONFIG, ...userConfig }
 
-    consola.debug("Configuration loaded from", CONFIG_FILE)
-  } catch {
-    // File doesn't exist or is invalid, use defaults
-    consola.debug("Using default configuration")
-  }
+      consola.debug("Configuration loaded from", CONFIG_FILE)
+    } catch {
+      // File doesn't exist or is invalid, use defaults
+      consola.debug("Using default configuration")
+    }
 
-  // Environment variable overrides
-  if (process.env.PORT) config.port = Number.parseInt(process.env.PORT, 10)
-  if (process.env.DEBUG === "true") config.debug = true
-  if (process.env.WEBUI_PASSWORD)
-    config.webuiPassword = process.env.WEBUI_PASSWORD
-  if (process.env.FALLBACK === "true") config.fallbackEnabled = true
+    // Environment variable overrides
+    if (process.env.PORT) config.port = Number.parseInt(process.env.PORT, 10)
+    if (process.env.DEBUG === "true") config.debug = true
+    if (process.env.WEBUI_PASSWORD)
+      config.webuiPassword = process.env.WEBUI_PASSWORD
+    if (process.env.FALLBACK === "true") config.fallbackEnabled = true
 
-  return config
+    return config
+  })
 }
 
 /**
  * Save configuration to file
  */
 export async function saveConfig(updates: Partial<Config>): Promise<void> {
-  try {
-    await ensureConfigDir()
+  return withConfigLock(async () => {
+    try {
+      await ensureConfigDir()
 
-    config = { ...config, ...updates }
-    await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2))
+      config = { ...config, ...updates }
+      await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2))
 
-    consola.debug("Configuration saved to", CONFIG_FILE)
-  } catch (error) {
-    consola.error("Failed to save configuration:", error)
-    throw error
-  }
+      consola.debug("Configuration saved to", CONFIG_FILE)
+    } catch (error) {
+      consola.error("Failed to save configuration:", error)
+      throw error
+    }
+  })
 }
 
 /**
