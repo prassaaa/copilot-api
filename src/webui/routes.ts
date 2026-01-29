@@ -36,9 +36,11 @@ import {
   getConfig,
   getConfigFile,
 } from "~/lib/config"
+import { registerInterval } from "~/lib/intervals"
 import { logEmitter } from "~/lib/logger"
 import { requestCache } from "~/lib/request-cache"
 import { updateQueueConfig } from "~/lib/request-queue"
+import { registerShutdownHandler } from "~/lib/shutdown"
 import { state } from "~/lib/state"
 import { usageStats } from "~/lib/usage-stats"
 import { cacheModels } from "~/lib/utils"
@@ -53,6 +55,19 @@ import { queueRoutes } from "~/webui/api/queue"
 import { webhookRoutes } from "~/webui/api/webhooks"
 
 export const webuiRoutes = new Hono()
+
+// Session expiration time (24 hours in milliseconds)
+const SESSION_EXPIRATION_MS = 24 * 60 * 60 * 1000
+// Cleanup interval (every 5 minutes)
+const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000
+// OAuth flow expiration (10 minutes)
+const OAUTH_FLOW_EXPIRATION_MS = 10 * 60 * 1000
+
+// Store active sessions with creation time
+interface SessionData {
+  createdAt: number
+}
+const activeSessions = new Map<string, SessionData>()
 
 // Store pending OAuth flows
 const pendingOAuthFlows = new Map<
@@ -76,8 +91,47 @@ function generateSessionToken(): string {
   return crypto.randomUUID()
 }
 
-// Store active sessions (in-memory for simplicity)
-const activeSessions = new Set<string>()
+/**
+ * Cleanup expired sessions and OAuth flows
+ */
+function cleanupExpiredSessions(): void {
+  const now = Date.now()
+
+  // Cleanup expired sessions
+  for (const [token, session] of activeSessions) {
+    if (now - session.createdAt > SESSION_EXPIRATION_MS) {
+      activeSessions.delete(token)
+    }
+  }
+
+  // Cleanup expired OAuth flows
+  for (const [flowId, flow] of pendingOAuthFlows) {
+    if (now - flow.createdAt > OAUTH_FLOW_EXPIRATION_MS) {
+      pendingOAuthFlows.delete(flowId)
+    }
+  }
+}
+
+/**
+ * Initialize session cleanup interval
+ */
+export function initSessionCleanup(): void {
+  const intervalId = setInterval(
+    cleanupExpiredSessions,
+    SESSION_CLEANUP_INTERVAL_MS,
+  )
+  registerInterval("webui-session-cleanup", intervalId)
+
+  // Register shutdown handler to cleanup sessions info
+  registerShutdownHandler(
+    "webui-sessions",
+    () => {
+      activeSessions.clear()
+      pendingOAuthFlows.clear()
+    },
+    90,
+  )
+}
 
 /**
  * POST /api/login - Authenticate with password
@@ -94,7 +148,7 @@ webuiRoutes.post("/api/login", async (c) => {
 
   if (body.password === config.webuiPassword) {
     const token = generateSessionToken()
-    activeSessions.add(token)
+    activeSessions.set(token, { createdAt: Date.now() })
 
     // Set cookie that expires in 24 hours
     setCookie(c, "session", token, {
@@ -656,7 +710,7 @@ webuiRoutes.post("/api/accounts/:id/pause", async (c) => {
 webuiRoutes.post("/api/accounts/:id/set-current", async (c) => {
   try {
     const id = c.req.param("id")
-    const result = await setCurrentAccount(id)
+    const result = setCurrentAccount(id)
 
     if (!result.success) {
       return c.json({ status: "error", error: "Account not found" }, 404)
@@ -735,7 +789,7 @@ webuiRoutes.post("/api/pool-config", async (c) => {
  */
 webuiRoutes.post("/api/accounts/refresh-quotas", async (c) => {
   try {
-    await refreshAllQuotas()
+    refreshAllQuotas()
     const accounts = await getAccountsStatus()
 
     return c.json({

@@ -251,7 +251,14 @@ function handleStreamingResponse(params: {
         continue
       }
 
-      const chunk = JSON.parse(rawEvent.data) as ChatCompletionChunk
+      let chunk: ChatCompletionChunk
+      try {
+        chunk = JSON.parse(rawEvent.data) as ChatCompletionChunk
+      } catch (parseError) {
+        consola.warn("Failed to parse stream chunk:", parseError, rawEvent.data)
+        continue // Skip malformed chunks
+      }
+
       const events = translateChunkToAnthropicEvents(chunk, streamState)
 
       if (chunk.usage?.completion_tokens) {

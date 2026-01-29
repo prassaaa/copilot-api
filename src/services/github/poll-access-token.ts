@@ -5,9 +5,12 @@ import {
   GITHUB_CLIENT_ID,
   standardHeaders,
 } from "~/lib/api-config"
-import { sleep } from "~/lib/utils"
+import { sleep } from "~/lib/retry"
 
 import type { DeviceCodeResponse } from "./get-device-code"
+
+// Safety limit for maximum polling attempts (about 15 minutes at 5s intervals)
+const MAX_POLL_ATTEMPTS = 180
 
 export async function pollAccessToken(
   deviceCode: DeviceCodeResponse,
@@ -19,7 +22,11 @@ export async function pollAccessToken(
   const startedAt = Date.now()
   const expiresAt = startedAt + deviceCode.expires_in * 1000
 
-  while (true) {
+  let attempts = 0
+
+  while (attempts < MAX_POLL_ATTEMPTS) {
+    attempts++
+
     if (Date.now() > expiresAt) {
       throw new Error("Device code expired")
     }
@@ -55,6 +62,8 @@ export async function pollAccessToken(
       await sleep(sleepDuration)
     }
   }
+
+  throw new Error("Maximum polling attempts exceeded")
 }
 
 interface AccessTokenResponse {
