@@ -142,6 +142,11 @@ const DEFAULT_PRICING: Record<string, ModelPricing> = {
     inputCostPer1M: 15.0,
     outputCostPer1M: 75.0,
   },
+  "claude-opus-4.6": {
+    model: "claude-opus-4.6",
+    inputCostPer1M: 15.0,
+    outputCostPer1M: 75.0,
+  },
   "claude-haiku-4.5": {
     model: "claude-haiku-4.5",
     inputCostPer1M: 0.8,

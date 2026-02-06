@@ -11,6 +11,11 @@ import { state } from "./state"
 // Default fallback mappings based on model families
 const DEFAULT_FALLBACKS: Record<string, Array<string>> = {
   // Claude models
+  "claude-opus-4.6": [
+    "claude-opus-4.5",
+    "claude-sonnet-4.5",
+    "claude-sonnet-4",
+  ],
   "claude-opus-4.5": [
     "claude-sonnet-4.5",
     "claude-sonnet-4",
