@@ -12,6 +12,145 @@ import { getActiveCopilotToken } from "~/lib/token"
 // Timeout for chat completions (2 minutes for long streaming responses)
 const CHAT_COMPLETION_TIMEOUT = 120000
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function isImageDetail(
+  value: unknown,
+): value is NonNullable<ImagePart["image_url"]["detail"]> {
+  return value === "low" || value === "high" || value === "auto"
+}
+
+function toImageUrlPartFromImageUrl(
+  imageUrlValue: unknown,
+  includeDetail: boolean,
+): ImagePart | null {
+  if (typeof imageUrlValue === "string") {
+    return { type: "image_url", image_url: { url: imageUrlValue } }
+  }
+
+  if (!isRecord(imageUrlValue) || typeof imageUrlValue.url !== "string") {
+    return null
+  }
+
+  let detail: ImagePart["image_url"]["detail"] | undefined
+  if (includeDetail && isImageDetail(imageUrlValue.detail)) {
+    detail = imageUrlValue.detail
+  }
+
+  return {
+    type: "image_url",
+    image_url: {
+      url: imageUrlValue.url,
+      ...(detail ? { detail } : {}),
+    },
+  }
+}
+
+function toImageUrlPartFromSource(sourceValue: unknown): ImagePart | null {
+  if (!isRecord(sourceValue)) {
+    return null
+  }
+
+  if (
+    sourceValue.type === "base64"
+    && typeof sourceValue.media_type === "string"
+    && typeof sourceValue.data === "string"
+  ) {
+    return {
+      type: "image_url",
+      image_url: {
+        url: `data:${sourceValue.media_type};base64,${sourceValue.data}`,
+      },
+    }
+  }
+
+  if (sourceValue.type === "url" && typeof sourceValue.url === "string") {
+    return { type: "image_url", image_url: { url: sourceValue.url } }
+  }
+
+  return null
+}
+
+function toImageUrlPart(part: Record<string, unknown>): ImagePart | null {
+  if (part.type === "image_url") {
+    return toImageUrlPartFromImageUrl(part.image_url, true)
+  }
+
+  if (part.type === "input_image") {
+    return (
+      toImageUrlPartFromImageUrl(part.image_url, false)
+      ?? toImageUrlPartFromSource(part.source)
+    )
+  }
+
+  if (part.type === "image") {
+    return toImageUrlPartFromSource(part.source)
+  }
+
+  return null
+}
+
+function toTextPart(part: Record<string, unknown>): TextPart | null {
+  const type = part.type
+
+  if (
+    (type === "text" || type === "input_text")
+    && typeof part.text === "string"
+  ) {
+    return { type: "text", text: part.text }
+  }
+
+  if (type === "thinking" && typeof part.thinking === "string") {
+    return { type: "text", text: part.thinking }
+  }
+
+  return null
+}
+
+function normalizeContentPart(part: unknown): ContentPart | null {
+  if (typeof part === "string") {
+    return { type: "text", text: part }
+  }
+
+  if (!isRecord(part)) {
+    return null
+  }
+
+  return toTextPart(part) ?? toImageUrlPart(part)
+}
+
+function normalizeMessageContent(
+  content: Message["content"],
+): Message["content"] {
+  if (!Array.isArray(content)) {
+    return content
+  }
+
+  const normalizedContent = content
+    .map((part) => normalizeContentPart(part))
+    .filter((part): part is ContentPart => part !== null)
+
+  if (normalizedContent.length === 0 && content.length > 0) {
+    return JSON.stringify(content)
+  }
+
+  return normalizedContent
+}
+
+function normalizePayloadContent(
+  payload: ChatCompletionsPayload,
+): ChatCompletionsPayload {
+  return {
+    ...payload,
+    messages: payload.messages.map((message) => ({
+      ...message,
+      content: normalizeMessageContent(message.content),
+    })),
+  }
+}
+
 /**
  * Get account info string for error messages
  */
@@ -28,10 +167,12 @@ function getAccountInfoForError(): string {
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
 ) => {
+  const normalizedPayload = normalizePayloadContent(payload)
+
   // Get token from pool (with tracking) or fallback to state
   const token = await getActiveCopilotToken()
 
-  const enableVision = payload.messages.some(
+  const enableVision = normalizedPayload.messages.some(
     (x) =>
       typeof x.content !== "string"
       && x.content?.some((x) => x.type === "image_url"),
@@ -39,7 +180,7 @@ export const createChatCompletions = async (
 
   // Agent/user check for X-Initiator header
   // Determine if any message is from an agent ("assistant" or "tool")
-  const isAgentCall = payload.messages.some((msg) =>
+  const isAgentCall = normalizedPayload.messages.some((msg) =>
     ["assistant", "tool"].includes(msg.role),
   )
 
@@ -54,7 +195,7 @@ export const createChatCompletions = async (
     {
       method: "POST",
       headers,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(normalizedPayload),
       timeout: CHAT_COMPLETION_TIMEOUT,
     },
   )
@@ -77,18 +218,18 @@ export const createChatCompletions = async (
     // Enhanced error logging
     consola.error("Failed to create chat completions", response)
     consola.error(`Account: ${accountInfo}`)
-    consola.error(`Model requested: ${payload.model}`)
+    consola.error(`Model requested: ${normalizedPayload.model}`)
 
     // Log to WebUI
     logEmitter.log(
       "error",
-      `API Error ${response.status}: ${errorBody?.error?.message || response.statusText} (model=${payload.model}, account=${accountInfo})`,
+      `API Error ${response.status}: ${errorBody?.error?.message || response.statusText} (model=${normalizedPayload.model}, account=${accountInfo})`,
     )
 
     // Check for model_not_supported error
     if (errorBody?.error?.code === "model_not_supported") {
       consola.box(
-        `⚠️  Model "${payload.model}" is not supported for this account.\n\n`
+        `⚠️  Model "${normalizedPayload.model}" is not supported for this account.\n\n`
           + `Account: ${accountInfo}\n\n`
           + `To fix this:\n`
           + `1. Go to https://github.com/settings/copilot\n`
@@ -97,14 +238,14 @@ export const createChatCompletions = async (
       )
       logEmitter.log(
         "warn",
-        `Model "${payload.model}" not supported for account ${accountInfo}`,
+        `Model "${normalizedPayload.model}" not supported for account ${accountInfo}`,
       )
     }
 
     throw new HTTPError("Failed to create chat completions", response)
   }
 
-  if (payload.stream) {
+  if (normalizedPayload.stream) {
     return events(response)
   }
 
