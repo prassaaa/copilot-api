@@ -736,15 +736,26 @@ webuiRoutes.post("/api/accounts/:id/set-current", async (c) => {
  */
 webuiRoutes.post("/api/accounts/refresh", async (c) => {
   try {
-    await refreshAllTokens()
+    void refreshAllTokens()
+      .then(() => {
+        logEmitter.log("success", "Background token refresh completed")
+      })
+      .catch((error: unknown) => {
+        logEmitter.log(
+          "error",
+          `Background token refresh failed: ${(error as Error).message}`,
+        )
+      })
+
     const accounts = await getAccountsStatus()
     const currentAccount = getCurrentAccount()
 
     return c.json({
       status: "ok",
-      message: "Tokens refreshed",
+      message: "Token refresh started",
       accounts,
       currentAccountId: currentAccount?.id ?? null,
+      refreshing: true,
     })
   } catch (error) {
     return c.json({ status: "error", error: (error as Error).message }, 400)

@@ -666,32 +666,71 @@ export function isPoolEnabledSync(): boolean {
   return poolConfig.enabled && poolState.accounts.length > 0
 }
 
+type TokenRefreshResult =
+  | {
+      account: AccountStatus
+      ok: true
+      token: string
+      refreshIn: number
+    }
+  | {
+      account: AccountStatus
+      ok: false
+      error: unknown
+    }
+
+async function fetchTokenRefreshResult(
+  account: AccountStatus,
+): Promise<TokenRefreshResult> {
+  try {
+    const copilot = await getCopilotToken(account.token)
+    return {
+      account,
+      ok: true,
+      token: copilot.token,
+      refreshIn: copilot.refresh_in,
+    }
+  } catch (error) {
+    return {
+      account,
+      ok: false,
+      error,
+    }
+  }
+}
+
 export async function refreshAllTokens(): Promise<void> {
   await ensurePoolStateLoaded()
+  const refreshResults = await Promise.all(
+    poolState.accounts.map((account) => fetchTokenRefreshResult(account)),
+  )
+
   let statusChanged = false
-  for (const account of poolState.accounts) {
-    try {
-      const copilot = await getCopilotToken(account.token)
-      account.copilotToken = copilot.token
-      account.copilotTokenExpires = Date.now() + copilot.refresh_in * 1000
-      if (!account.active || account.rateLimited) {
-        statusChanged = true
-      }
+  for (const result of refreshResults) {
+    if (result.ok) {
+      const account = result.account
+      const changed = !account.active || account.rateLimited
+      account.copilotToken = result.token
+      account.copilotTokenExpires = Date.now() + result.refreshIn * 1000
       account.active = true
       account.rateLimited = false
       account.errorCount = 0
       account.lastError = undefined
-    } catch (error) {
-      if (account.active) {
-        statusChanged = true
-      }
-      account.active = false
-      account.lastError = String(error)
+      statusChanged ||= changed
+      continue
     }
+
+    const account = result.account
+    const changed = account.active
+    account.active = false
+    account.lastError = String(result.error)
+    statusChanged ||= changed
   }
+
   if (statusChanged) {
     invalidateActiveAccountsCache()
   }
+
   savePoolState()
 }
 

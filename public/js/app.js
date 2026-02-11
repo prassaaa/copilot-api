@@ -731,7 +731,12 @@ document.addEventListener("alpine:init", () => {
         if (data.status === "ok") {
           this.accountPool.accounts = data.accounts
           this.accountPool.currentAccountId = data.currentAccountId
-          this.showToast("Tokens refreshed", "success")
+          this.showToast(data.message || "Token refresh started", "success")
+
+          // Refresh the list again after background refresh has time to complete
+          setTimeout(() => {
+            void this.fetchAccounts()
+          }, 4000)
         } else {
           throw new Error(data.error)
         }
