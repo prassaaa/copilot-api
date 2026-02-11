@@ -1068,307 +1068,382 @@
             </div>
             
             <!-- Accounts View -->
-            <div x-show="activeTab === 'accounts'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold text-white">Account Pool</h1>
-                    <div class="flex gap-2">
-                        <button @click="refreshQuotas()"
-                                class="px-4 py-2 text-sm bg-neon-cyan/20 text-neon-cyan rounded-lg hover:bg-neon-cyan/30 transition-colors">
-                            Refresh Quotas
-                        </button>
-                        <button @click="refreshAccounts()"
-                                class="px-4 py-2 text-sm bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors">
-                            Refresh Tokens
-                        </button>
+            <div x-show="activeTab === 'accounts'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-20 -right-16 h-56 w-56 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="relative space-y-6">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Pool Operations</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">Account Pool Command Center</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Manage account routing, monitor token health, and keep GitHub account rotation resilient.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Pool</span>
+                                    <span class="ml-1 font-semibold" :class="accountPool.enabled ? 'text-emerald-300' : 'text-gray-300'" x-text="accountPool.enabled ? 'Enabled' : 'Disabled'"></span>
+                                </div>
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Current</span>
+                                    <span class="ml-1 font-semibold text-neon-cyan" x-text="accountPool.currentAccountId || 'N/A'"></span>
+                                </div>
+                                <button @click="refreshQuotas()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
+                                    Refresh Quotas
+                                </button>
+                                <button @click="refreshAccounts()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-purple/20 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/30 transition-colors">
+                                    Refresh Tokens
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Configured</p>
+                                <p class="text-2xl font-bold text-white" x-text="usageAccountSummary.total"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Healthy</p>
+                                <p class="text-2xl font-bold text-emerald-300" x-text="usageAccountSummary.active"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Paused</p>
+                                <p class="text-2xl font-bold text-yellow-300" x-text="usageAccountSummary.paused"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Low Quota</p>
+                                <p class="text-2xl font-bold text-orange-300" x-text="usageAccountSummary.lowQuota"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Reset Window</p>
+                                <p class="text-lg font-bold text-neon-cyan" x-text="usageQuotaResetDate"></p>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </section>
 
-                <!-- Pool Settings -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6 mb-6">
-                    <h2 class="text-lg font-semibold text-white mb-4">Pool Configuration</h2>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                        <h2 class="text-lg font-semibold text-white">Pool Configuration</h2>
+                        <p class="text-xs text-gray-500 mt-1 mb-4">Tune how requests are distributed across your account pool.</p>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label class="flex items-center gap-3">
+                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4 space-y-4">
+                            <label class="flex items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-sm font-medium text-white">Enable Multi-Account Pool</p>
+                                    <p class="text-xs text-gray-500 mt-0.5">Use multiple GitHub accounts for load balancing.</p>
+                                </div>
                                 <input type="checkbox"
                                        x-model="accountPool.enabled"
                                        @change="updatePoolConfig()"
-                                       class="rounded bg-space-950 border-space-border w-5 h-5 text-neon-purple focus:ring-neon-purple/50">
-                                <span class="text-white font-medium">Enable Multi-Account Pool</span>
+                                       class="rounded bg-space-900 border-space-border w-5 h-5 text-neon-purple focus:ring-neon-purple/50">
                             </label>
-                            <p class="text-gray-500 text-sm mt-1 ml-8">Use multiple GitHub accounts for load balancing</p>
-                        </div>
 
-                        <div>
-                            <label class="block text-sm font-medium text-gray-400 mb-2">Selection Strategy</label>
-                            <select x-model="accountPool.strategy"
-                                    @change="updatePoolConfig()"
-                                    class="w-full px-4 py-2.5 bg-space-950 border border-space-border rounded-lg text-white focus:ring-2 focus:ring-neon-purple/50 focus:border-neon-purple outline-none">
-                                <option value="sticky">Sticky (stay on one account)</option>
-                                <option value="round-robin">Round Robin (rotate each request)</option>
-                                <option value="hybrid">Hybrid (sticky until error, then rotate)</option>
-                                <option value="quota-based">Quota-Based (use account with highest quota)</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Add Account -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6 mb-6">
-                    <h2 class="text-lg font-semibold text-white mb-4">Add Account</h2>
-
-                    <!-- OAuth Flow UI -->
-                    <template x-if="!oauthFlow.active">
-                        <div>
-                            <p class="text-gray-400 text-sm mb-4">
-                                Add a new GitHub account via OAuth. This will open GitHub's authorization page.
-                            </p>
-                            <div class="flex gap-4 items-end">
-                                <div class="flex-1">
-                                    <label class="block text-sm font-medium text-gray-400 mb-2">Label (optional)</label>
-                                    <input type="text"
-                                           x-model="newAccountLabel"
-                                           placeholder="e.g., Work, Personal, School"
-                                           class="w-full px-4 py-2.5 bg-space-950 border border-space-border rounded-lg text-white focus:ring-2 focus:ring-neon-purple/50 focus:border-neon-purple outline-none">
-                                </div>
-                                <button @click="startOAuthFlow()"
-                                        class="px-6 py-2.5 bg-gradient-to-r from-neon-purple to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity font-medium flex items-center gap-2">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                                    </svg>
-                                    Login with GitHub
-                                </button>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Selection Strategy</label>
+                                <select x-model="accountPool.strategy"
+                                        @change="updatePoolConfig()"
+                                        class="w-full px-4 py-2.5 bg-space-900 border border-space-border rounded-lg text-white focus:ring-2 focus:ring-neon-purple/50 focus:border-neon-purple outline-none text-sm">
+                                    <option value="sticky">Sticky (stay on one account)</option>
+                                    <option value="round-robin">Round Robin (rotate each request)</option>
+                                    <option value="hybrid">Hybrid (sticky until error, then rotate)</option>
+                                    <option value="quota-based">Quota-Based (use account with highest quota)</option>
+                                </select>
                             </div>
                         </div>
-                    </template>
+                    </section>
 
-                    <!-- OAuth Flow Progress -->
-                    <template x-if="oauthFlow.active">
-                        <div class="text-center py-6">
-                            <div class="mb-6">
-                                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-neon-purple/20 mb-4">
-                                    <svg class="w-8 h-8 text-neon-purple animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                                    </svg>
-                                </div>
-                                <h3 class="text-xl font-semibold text-white mb-2">Enter this code on GitHub</h3>
-                                <div class="inline-flex items-center gap-2 px-6 py-3 bg-space-950 border-2 border-neon-cyan rounded-lg">
-                                    <span class="text-3xl font-mono font-bold text-neon-cyan tracking-wider" x-text="oauthFlow.userCode"></span>
-                                    <button @click="copyToClipboard(oauthFlow.userCode)"
-                                            class="p-2 text-gray-400 hover:text-neon-cyan transition-colors"
-                                            title="Copy code">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <section class="xl:col-span-2 bg-space-900 border border-space-border rounded-2xl p-5">
+                        <h2 class="text-lg font-semibold text-white">Add Account</h2>
+                        <p class="text-xs text-gray-500 mt-1 mb-4">Authorize an additional GitHub account to expand pool capacity.</p>
+
+                        <template x-if="!oauthFlow.active">
+                            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+                                    <div>
+                                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Label (optional)</label>
+                                        <input type="text"
+                                               x-model="newAccountLabel"
+                                               placeholder="e.g., Work, Personal, School"
+                                               class="w-full px-4 py-2.5 bg-space-900 border border-space-border rounded-lg text-white focus:ring-2 focus:ring-neon-purple/50 focus:border-neon-purple outline-none text-sm">
+                                    </div>
+                                    <button @click="startOAuthFlow()"
+                                            class="px-6 py-2.5 bg-gradient-to-r from-neon-purple to-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity font-medium flex items-center justify-center gap-2">
+                                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                                         </svg>
+                                        Connect GitHub Account
                                     </button>
-                                </div>
-                            </div>
-
-                            <p class="text-gray-400 mb-4">
-                                Go to <a :href="oauthFlow.verificationUri" target="_blank" class="text-neon-cyan hover:underline" x-text="oauthFlow.verificationUri"></a>
-                            </p>
-
-                            <div class="flex justify-center gap-4">
-                                <a :href="oauthFlow.verificationUri" target="_blank"
-                                   class="px-6 py-2.5 bg-gradient-to-r from-neon-cyan to-blue-500 text-white rounded-lg hover:opacity-90 transition-opacity font-medium">
-                                    Open GitHub
-                                </a>
-                                <button @click="completeOAuthFlow()"
-                                        :disabled="oauthFlow.completing"
-                                        class="px-6 py-2.5 bg-neon-green text-black rounded-lg hover:opacity-90 transition-opacity font-medium disabled:opacity-50">
-                                    <span x-show="!oauthFlow.completing">I've Entered the Code</span>
-                                    <span x-show="oauthFlow.completing" class="flex items-center gap-2">
-                                        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Verifying...
-                                    </span>
-                                </button>
-                                <button @click="cancelOAuthFlow()"
-                                        class="px-6 py-2.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors font-medium">
-                                    Cancel
-                                </button>
-                            </div>
-
-                            <p class="text-gray-500 text-sm mt-4">
-                                Code expires in <span x-text="Math.floor(oauthFlow.expiresIn / 60)"></span> minutes
-                            </p>
-                        </div>
-                    </template>
-                </div>
-
-                <!-- Accounts List -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-semibold text-white">
-                            Accounts
-                            <span class="text-sm font-normal text-gray-500">(<span x-text="accountPool.accounts.length"></span> total)</span>
-                        </h2>
-                        <div x-show="accountPool.currentAccountId" class="text-xs text-gray-500">
-                            Current: <span class="text-neon-cyan" x-text="accountPool.currentAccountId"></span>
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <!-- All Accounts (no more primary distinction) -->
-                        <template x-for="account in accountPool.accounts" :key="account.id">
-                            <div class="p-4 bg-space-950 border rounded-lg transition-colors"
-                                 :class="isCurrentAccount(account.id) ? 'border-neon-purple/50' : 'border-space-border'">
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-neon-purple to-blue-600 flex items-center justify-center text-white font-bold text-lg relative">
-                                            <span x-text="account.login.charAt(0).toUpperCase()"></span>
-                                            <div x-show="isCurrentAccount(account.id)"
-                                                 class="absolute -top-1 -right-1 w-4 h-4 bg-neon-green rounded-full border-2 border-space-950"
-                                                 title="Current account"></div>
-                                        </div>
-                                        <div>
-                                            <div class="font-medium text-white flex items-center gap-2">
-                                                <span x-text="account.login"></span>
-                                                <span x-show="isCurrentAccount(account.id)"
-                                                      class="px-2 py-0.5 text-xs bg-neon-purple/10 text-neon-purple rounded">Current</span>
-                                            </div>
-                                            <div class="text-xs text-gray-500 mt-1">
-                                                <span class="text-gray-400">Requests:</span> <span x-text="account.requestCount"></span>
-                                                <span class="mx-1">|</span>
-                                                <span class="text-gray-400">Errors:</span> <span :class="account.errorCount > 0 ? 'text-red-400' : ''" x-text="account.errorCount"></span>
-                                                <span class="mx-1">|</span>
-                                                <span class="text-gray-400">Last used:</span> <span x-text="formatRelativeTime(account.lastUsed)"></span>
-                                                <span class="mx-1">|</span>
-                                                <span class="text-gray-400">Quota:</span>
-                                                <span :class="getAccountQuotaClass(account)" x-text="getAccountQuotaPercent(account)"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex items-center gap-3">
-                                        <div class="text-right">
-                                            <span class="px-2 py-1 text-xs rounded"
-                                                  :class="{
-                                                      'bg-neon-green/10 text-neon-green': account.active && !account.rateLimited && !account.paused,
-                                                      'bg-yellow-500/10 text-yellow-400': account.rateLimited && !account.paused,
-                                                      'bg-red-500/10 text-red-400': !account.active && !account.paused,
-                                                      'bg-orange-500/10 text-orange-400': account.paused && account.pausedReason === 'quota',
-                                                      'bg-gray-500/10 text-gray-400': account.paused && account.pausedReason !== 'quota'
-                                                  }"
-                                                  x-text="account.paused ? (account.pausedReason === 'quota' ? 'Low Quota' : 'Paused') : (account.active ? (account.rateLimited ? 'Rate Limited' : 'Active') : 'Inactive')">
-                                            </span>
-                                            <div x-show="account.rateLimited && account.rateLimitResetAt"
-                                                 class="text-xs text-yellow-400 mt-1"
-                                                 x-text="'Resets ' + formatResetTime(account.rateLimitResetAt)">
-                                            </div>
-                                        </div>
-                                        <button x-show="!isCurrentAccount(account.id)"
-                                                @click="setCurrentAccount(account.id)"
-                                                class="p-2 text-neon-purple hover:text-neon-purple/80 hover:bg-neon-purple/10 rounded-lg transition-colors"
-                                                title="Set as current account">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </button>
-                                        <button @click="togglePauseAccount(account.id, !account.paused)"
-                                                class="p-2 rounded-lg transition-colors"
-                                                :class="account.paused ? 'text-neon-green hover:bg-neon-green/10' : 'text-yellow-400 hover:bg-yellow-500/10'"
-                                                :title="account.paused ? 'Resume account' : 'Pause account'">
-                                            <svg x-show="!account.paused" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <svg x-show="account.paused" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </button>
-                                        <button @click="removeAccount(account.id)"
-                                                class="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                title="Remove account">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Quota Display -->
-                                <div x-show="account.quota" class="mt-3 pt-3 border-t border-space-border">
-                                    <div class="grid grid-cols-3 gap-4">
-                                        <!-- Chat Quota -->
-                                        <div>
-                                            <div class="text-xs text-gray-500 mb-1">Chat</div>
-                                            <div class="flex items-center gap-2">
-                                                <div class="flex-1 h-2 bg-space-900 rounded-full overflow-hidden">
-                                                    <div class="h-full rounded-full transition-all"
-                                                         :class="{
-                                                             'bg-neon-green': account.quota?.chat?.percentRemaining > 50,
-                                                             'bg-yellow-400': account.quota?.chat?.percentRemaining <= 50 && account.quota?.chat?.percentRemaining > 20,
-                                                             'bg-red-400': account.quota?.chat?.percentRemaining <= 20
-                                                         }"
-                                                         :style="'width: ' + (account.quota?.chat?.unlimited ? 100 : (account.quota?.chat?.percentRemaining || 0)) + '%'">
-                                                    </div>
-                                                </div>
-                                                <span class="text-xs text-gray-400" x-text="account.quota?.chat?.unlimited ? '∞' : (account.quota?.chat?.percentRemaining?.toFixed(0) + '%')"></span>
-                                            </div>
-                                        </div>
-                                        <!-- Completions Quota -->
-                                        <div>
-                                            <div class="text-xs text-gray-500 mb-1">Completions</div>
-                                            <div class="flex items-center gap-2">
-                                                <div class="flex-1 h-2 bg-space-900 rounded-full overflow-hidden">
-                                                    <div class="h-full rounded-full transition-all"
-                                                         :class="{
-                                                             'bg-neon-green': account.quota?.completions?.percentRemaining > 50,
-                                                             'bg-yellow-400': account.quota?.completions?.percentRemaining <= 50 && account.quota?.completions?.percentRemaining > 20,
-                                                             'bg-red-400': account.quota?.completions?.percentRemaining <= 20
-                                                         }"
-                                                         :style="'width: ' + (account.quota?.completions?.unlimited ? 100 : (account.quota?.completions?.percentRemaining || 0)) + '%'">
-                                                    </div>
-                                                </div>
-                                                <span class="text-xs text-gray-400" x-text="account.quota?.completions?.unlimited ? '∞' : (account.quota?.completions?.percentRemaining?.toFixed(0) + '%')"></span>
-                                            </div>
-                                        </div>
-                                        <!-- Premium Quota -->
-                                        <div>
-                                            <div class="text-xs text-gray-500 mb-1">Premium</div>
-                                            <div class="flex items-center gap-2">
-                                                <div class="flex-1 h-2 bg-space-900 rounded-full overflow-hidden">
-                                                    <div class="h-full rounded-full transition-all"
-                                                         :class="{
-                                                             'bg-neon-green': account.quota?.premiumInteractions?.percentRemaining > 50,
-                                                             'bg-yellow-400': account.quota?.premiumInteractions?.percentRemaining <= 50 && account.quota?.premiumInteractions?.percentRemaining > 20,
-                                                             'bg-red-400': account.quota?.premiumInteractions?.percentRemaining <= 20
-                                                         }"
-                                                         :style="'width: ' + (account.quota?.premiumInteractions?.unlimited ? 100 : (account.quota?.premiumInteractions?.percentRemaining || 0)) + '%'">
-                                                    </div>
-                                                </div>
-                                                <span class="text-xs text-gray-400" x-text="account.quota?.premiumInteractions?.unlimited ? '∞' : (account.quota?.premiumInteractions?.percentRemaining?.toFixed(0) + '%')"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div x-show="account.quota?.resetDate" class="mt-2 text-xs text-gray-500">
-                                        Resets: <span x-text="new Date(account.quota?.resetDate).toLocaleDateString()"></span>
-                                    </div>
-                                </div>
-
-                                <!-- Error details -->
-                                <div x-show="account.lastError && !account.quota"
-                                     class="mt-3 pt-3 border-t border-space-border">
-                                    <div class="text-xs">
-                                        <span class="text-gray-500">Last error:</span>
-                                        <span class="text-red-400 ml-1" x-text="account.lastError"></span>
-                                    </div>
                                 </div>
                             </div>
                         </template>
 
-                        <div x-show="accountPool.accounts.length === 0" class="text-center py-8 text-gray-500">
-                            <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                            <p>No accounts configured</p>
-                            <p class="text-sm mt-1">Add GitHub accounts above to enable multi-account support</p>
+                        <template x-if="oauthFlow.active">
+                            <div class="rounded-xl border border-neon-cyan/30 bg-space-950/80 p-5">
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div class="rounded-xl border border-space-border/60 bg-space-900/70 p-4">
+                                        <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Verification Code</p>
+                                        <div class="flex items-center justify-between gap-2 rounded-lg border border-neon-cyan/40 bg-space-950 px-4 py-3">
+                                            <span class="text-2xl font-mono font-bold text-neon-cyan tracking-wider" x-text="oauthFlow.userCode"></span>
+                                            <button @click="copyToClipboard(oauthFlow.userCode)"
+                                                    class="p-2 text-gray-400 hover:text-neon-cyan transition-colors"
+                                                    title="Copy code">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-2">
+                                            Expires in <span class="text-gray-300" x-text="Math.floor(oauthFlow.expiresIn / 60)"></span> minutes
+                                        </p>
+                                    </div>
+
+                                    <div class="rounded-xl border border-space-border/60 bg-space-900/70 p-4">
+                                        <p class="text-sm text-gray-300 mb-4">
+                                            Open GitHub, enter the code, then return here to complete verification.
+                                        </p>
+                                        <div class="flex flex-wrap gap-2">
+                                            <a :href="oauthFlow.verificationUri" target="_blank"
+                                               class="px-4 py-2.5 bg-gradient-to-r from-neon-cyan to-blue-500 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
+                                                Open GitHub
+                                            </a>
+                                            <button @click="completeOAuthFlow()"
+                                                    :disabled="oauthFlow.completing"
+                                                    class="px-4 py-2.5 bg-neon-green text-black rounded-lg hover:opacity-90 transition-opacity text-sm font-medium disabled:opacity-50">
+                                                <span x-show="!oauthFlow.completing">I Entered the Code</span>
+                                                <span x-show="oauthFlow.completing" class="flex items-center gap-2">
+                                                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    Verifying...
+                                                </span>
+                                            </button>
+                                            <button @click="cancelOAuthFlow()"
+                                                    class="px-4 py-2.5 bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors text-sm font-medium">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-3 break-all">
+                                            URL: <a :href="oauthFlow.verificationUri" target="_blank" class="text-neon-cyan hover:underline" x-text="oauthFlow.verificationUri"></a>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </section>
+                </div>
+
+                <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">
+                                Accounts
+                                <span class="text-sm font-normal text-gray-500">(<span x-text="accountPool.accounts.length"></span> total)</span>
+                            </h2>
+                            <p class="text-xs text-gray-500 mt-1">Operational cards with quota visibility and account actions.</p>
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            Active strategy:
+                            <span class="text-gray-300 capitalize" x-text="(accountPool.strategy || 'sticky').replace('-', ' ')"></span>
                         </div>
                     </div>
-                </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4" x-show="accountPool.accounts.length > 0">
+                        <template x-for="account in accountPool.accounts" :key="account.id">
+                            <article class="relative overflow-hidden rounded-2xl border p-5 transition-all duration-200"
+                                     :class="isCurrentAccount(account.id) ? 'bg-space-900 border-neon-cyan/40' : 'bg-space-900 border-space-border hover:border-space-border/70'">
+                                <div class="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full blur-3xl"
+                                     :class="isCurrentAccount(account.id) ? 'bg-neon-cyan/10' : 'bg-neon-purple/10'"></div>
+                                <div class="relative">
+                                    <div class="flex items-start justify-between gap-3 mb-4">
+                                        <div class="flex items-center gap-3 min-w-0">
+                                            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-neon-purple to-blue-600 flex items-center justify-center text-white font-bold shrink-0">
+                                                <span x-text="account.login.charAt(0).toUpperCase()"></span>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div class="flex items-center gap-2 flex-wrap">
+                                                    <h3 class="font-semibold text-white truncate" x-text="account.login"></h3>
+                                                    <span x-show="isCurrentAccount(account.id)"
+                                                          class="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30">
+                                                        Current
+                                                    </span>
+                                                </div>
+                                                <p class="text-xs text-gray-500 truncate">ID: <span x-text="account.id"></span></p>
+                                            </div>
+                                        </div>
+                                        <span class="px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap"
+                                              :class="getUsageStatusClass(account)"
+                                              x-text="getUsageStatusLabel(account)">
+                                        </span>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                                        <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                            <div class="text-[11px] uppercase tracking-wide text-gray-500">Requests</div>
+                                            <div class="text-sm font-semibold text-white" x-text="account.requestCount"></div>
+                                        </div>
+                                        <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                            <div class="text-[11px] uppercase tracking-wide text-gray-500">Errors</div>
+                                            <div class="text-sm font-semibold" :class="account.errorCount > 0 ? 'text-red-300' : 'text-white'" x-text="account.errorCount"></div>
+                                        </div>
+                                        <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                            <div class="text-[11px] uppercase tracking-wide text-gray-500">Effective Quota</div>
+                                            <div class="text-sm font-semibold"
+                                                 :class="{
+                                                     'text-emerald-300': getEffectiveAccountQuotaPercent(account) === null || getEffectiveAccountQuotaPercent(account) > 50,
+                                                     'text-yellow-300': getEffectiveAccountQuotaPercent(account) !== null && getEffectiveAccountQuotaPercent(account) <= 50 && getEffectiveAccountQuotaPercent(account) > 20,
+                                                     'text-red-300': getEffectiveAccountQuotaPercent(account) !== null && getEffectiveAccountQuotaPercent(account) <= 20
+                                                 }"
+                                                 x-text="getEffectiveAccountQuotaPercent(account) === null ? 'N/A' : (getEffectiveAccountQuotaPercent(account) + '%')">
+                                            </div>
+                                        </div>
+                                        <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                            <div class="text-[11px] uppercase tracking-wide text-gray-500">Last Used</div>
+                                            <div class="text-sm font-semibold text-white" x-text="formatRelativeTime(account.lastUsed)"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-wrap items-center gap-2 mb-4">
+                                        <button x-show="!isCurrentAccount(account.id)"
+                                                @click="setCurrentAccount(account.id)"
+                                                class="px-3 py-2 text-xs font-medium rounded-lg bg-neon-purple/15 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/25 transition-colors">
+                                            Set Current
+                                        </button>
+                                        <button @click="togglePauseAccount(account.id, !account.paused)"
+                                                class="px-3 py-2 text-xs font-medium rounded-lg transition-colors border"
+                                                :class="account.paused ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25' : 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/25'"
+                                                x-text="account.paused ? 'Resume' : 'Pause'">
+                                        </button>
+                                        <button @click="removeAccount(account.id)"
+                                                class="px-3 py-2 text-xs font-medium rounded-lg bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-colors">
+                                            Remove
+                                        </button>
+                                        <span x-show="account.rateLimited && account.rateLimitResetAt"
+                                              class="px-2.5 py-1 text-[11px] rounded border border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
+                                              x-text="'Rate limit resets ' + formatResetTime(account.rateLimitResetAt)">
+                                        </span>
+                                    </div>
+
+                                    <template x-if="account.quota">
+                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <h4 class="text-sm font-semibold text-white">Chat</h4>
+                                                    <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                                          :class="{
+                                                              'bg-emerald-500/15 text-emerald-300': account.quota?.chat?.unlimited || account.quota?.chat?.percentRemaining > 50,
+                                                              'bg-yellow-500/15 text-yellow-300': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 50 && account.quota?.chat?.percentRemaining > 20,
+                                                              'bg-red-500/15 text-red-300': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 20
+                                                          }"
+                                                          x-text="account.quota?.chat?.unlimited ? 'Unlimited' : ((account.quota?.chat?.percentRemaining ?? 0).toFixed(0) + '%')">
+                                                    </span>
+                                                </div>
+                                                <div class="text-xs text-gray-400 mb-2">
+                                                    <span x-text="account.quota?.chat?.unlimited ? '∞' : (account.quota?.chat?.remaining + ' / ' + account.quota?.chat?.entitlement)"></span>
+                                                </div>
+                                                <div class="h-2 rounded-full bg-space-800 overflow-hidden">
+                                                    <div class="h-2 rounded-full transition-all duration-500"
+                                                         :class="{
+                                                             'bg-gradient-to-r from-neon-cyan to-blue-500': account.quota?.chat?.unlimited || account.quota?.chat?.percentRemaining > 50,
+                                                             'bg-gradient-to-r from-yellow-500 to-orange-500': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 50 && account.quota?.chat?.percentRemaining > 20,
+                                                             'bg-gradient-to-r from-red-500 to-pink-500': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 20
+                                                         }"
+                                                         :style="'width: ' + (account.quota?.chat?.unlimited ? 100 : (account.quota?.chat?.percentRemaining ?? 0)) + '%'">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <h4 class="text-sm font-semibold text-white">Completions</h4>
+                                                    <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                                          :class="{
+                                                              'bg-emerald-500/15 text-emerald-300': account.quota?.completions?.unlimited || account.quota?.completions?.percentRemaining > 50,
+                                                              'bg-yellow-500/15 text-yellow-300': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 50 && account.quota?.completions?.percentRemaining > 20,
+                                                              'bg-red-500/15 text-red-300': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 20
+                                                          }"
+                                                          x-text="account.quota?.completions?.unlimited ? 'Unlimited' : ((account.quota?.completions?.percentRemaining ?? 0).toFixed(0) + '%')">
+                                                    </span>
+                                                </div>
+                                                <div class="text-xs text-gray-400 mb-2">
+                                                    <span x-text="account.quota?.completions?.unlimited ? '∞' : (account.quota?.completions?.remaining + ' / ' + account.quota?.completions?.entitlement)"></span>
+                                                </div>
+                                                <div class="h-2 rounded-full bg-space-800 overflow-hidden">
+                                                    <div class="h-2 rounded-full transition-all duration-500"
+                                                         :class="{
+                                                             'bg-gradient-to-r from-neon-purple to-fuchsia-500': account.quota?.completions?.unlimited || account.quota?.completions?.percentRemaining > 50,
+                                                             'bg-gradient-to-r from-yellow-500 to-orange-500': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 50 && account.quota?.completions?.percentRemaining > 20,
+                                                             'bg-gradient-to-r from-red-500 to-pink-500': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 20
+                                                         }"
+                                                         :style="'width: ' + (account.quota?.completions?.unlimited ? 100 : (account.quota?.completions?.percentRemaining ?? 0)) + '%'">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <h4 class="text-sm font-semibold text-white">Premium</h4>
+                                                    <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                                          :class="{
+                                                              'bg-emerald-500/15 text-emerald-300': account.quota?.premiumInteractions?.unlimited || account.quota?.premiumInteractions?.percentRemaining > 50,
+                                                              'bg-yellow-500/15 text-yellow-300': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 50 && account.quota?.premiumInteractions?.percentRemaining > 20,
+                                                              'bg-red-500/15 text-red-300': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 20
+                                                          }"
+                                                          x-text="account.quota?.premiumInteractions?.unlimited ? 'Unlimited' : ((account.quota?.premiumInteractions?.percentRemaining ?? 0).toFixed(0) + '%')">
+                                                    </span>
+                                                </div>
+                                                <div class="text-xs text-gray-400 mb-2">
+                                                    <span x-text="account.quota?.premiumInteractions?.unlimited ? '∞' : (account.quota?.premiumInteractions?.remaining + ' / ' + account.quota?.premiumInteractions?.entitlement)"></span>
+                                                </div>
+                                                <div class="h-2 rounded-full bg-space-800 overflow-hidden">
+                                                    <div class="h-2 rounded-full transition-all duration-500"
+                                                         :class="{
+                                                             'bg-gradient-to-r from-neon-green to-emerald-500': account.quota?.premiumInteractions?.unlimited || account.quota?.premiumInteractions?.percentRemaining > 50,
+                                                             'bg-gradient-to-r from-yellow-500 to-orange-500': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 50 && account.quota?.premiumInteractions?.percentRemaining > 20,
+                                                             'bg-gradient-to-r from-red-500 to-pink-500': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 20
+                                                         }"
+                                                         :style="'width: ' + (account.quota?.premiumInteractions?.unlimited ? 100 : (account.quota?.premiumInteractions?.percentRemaining ?? 0)) + '%'">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <template x-if="!account.quota">
+                                        <div class="rounded-xl border border-dashed border-space-border bg-space-950/60 p-5 text-center">
+                                            <svg class="w-7 h-7 mx-auto mb-2 text-gray-600 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                            </svg>
+                                            <p class="text-sm text-gray-400">Quota data is not available yet.</p>
+                                            <p class="text-xs text-gray-500 mt-1">Use Refresh Quotas to load the latest values.</p>
+                                        </div>
+                                    </template>
+
+                                    <div x-show="account.quota?.resetDate" class="mt-3 text-xs text-gray-500">
+                                        Reset date: <span class="text-gray-300" x-text="new Date(account.quota?.resetDate).toLocaleDateString()"></span>
+                                    </div>
+
+                                    <div x-show="account.lastError" class="mt-3 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                                        Last error: <span class="font-mono break-all" x-text="account.lastError"></span>
+                                    </div>
+                                </div>
+                            </article>
+                        </template>
+                    </div>
+
+                    <div x-show="accountPool.accounts.length === 0" class="text-center py-12 text-gray-500">
+                        <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <p class="text-gray-400 mb-1">No accounts configured</p>
+                        <p class="text-sm text-gray-600">Add a GitHub account above to enable account pool rotation.</p>
+                    </div>
+                </section>
             </div>
             
             <!-- Logs View -->
