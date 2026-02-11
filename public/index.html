@@ -2244,140 +2244,165 @@
             </div>
 
             <!-- API Playground View -->
-            <div x-show="activeTab === 'playground'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold text-white">API Playground</h1>
-                    <div class="flex gap-2">
-                        <button @click="copyAsCurl()"
-                                class="px-4 py-2 text-sm bg-space-800 text-gray-400 rounded-lg hover:bg-space-700 transition-colors">
-                            Copy as cURL
-                        </button>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Request Panel -->
-                    <div class="space-y-4">
-                        <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                            <h2 class="text-lg font-semibold text-white mb-4">Request</h2>
-
-                            <div class="space-y-4">
-                                <!-- Endpoint -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-400 mb-2">Endpoint</label>
-                                    <select x-model="playground.endpoint"
-                                            class="w-full px-4 py-2 bg-space-950 border border-space-border rounded-lg text-white focus:border-neon-purple focus:outline-none">
-                                        <option value="/v1/chat/completions">OpenAI - /v1/chat/completions</option>
-                                        <option value="/v1/messages">Anthropic - /v1/messages</option>
-                                    </select>
+            <div x-show="activeTab === 'playground'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-20 -right-16 h-56 w-56 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-20 -left-12 h-56 w-56 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="relative space-y-6">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Interactive Sandbox</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">API Playground Command Center</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Compose payloads, validate streaming behavior, and test endpoint responses without leaving the dashboard.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Endpoint</span>
+                                    <span class="ml-1 font-semibold text-gray-200 font-mono" x-text="playground.endpoint"></span>
                                 </div>
-
-                                <!-- Model -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-400 mb-2">Model</label>
-                                    <select x-model="playground.model"
-                                            @change="updatePlaygroundRequest()"
-                                            class="w-full px-4 py-2 bg-space-950 border border-space-border rounded-lg text-white focus:border-neon-purple focus:outline-none">
-                                        <template x-for="model in models" :key="model.id">
-                                            <option :value="model.id" x-text="model.id"></option>
-                                        </template>
-                                    </select>
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Stream</span>
+                                    <span class="ml-1 font-semibold" :class="playground.stream ? 'text-emerald-300' : 'text-gray-300'" x-text="playground.stream ? 'On' : 'Off'"></span>
                                 </div>
-
-                                <!-- Stream Toggle -->
-                                <div class="flex items-center gap-3">
-                                    <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                                        <input type="checkbox" x-model="playground.stream" @change="updatePlaygroundRequest()"
-                                               class="w-4 h-4 rounded bg-space-950 border-space-border text-neon-purple">
-                                        Stream response
-                                    </label>
-                                </div>
-
-                                <!-- Request Body -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-400 mb-2">Request Body (JSON)</label>
-                                    <textarea x-model="playground.request"
-                                              rows="12"
-                                              class="w-full px-4 py-3 bg-space-950 border border-space-border rounded-lg text-white font-mono text-sm focus:border-neon-purple focus:outline-none resize-none"
-                                              :class="playground.error && playground.error.includes('JSON') ? 'border-red-500' : ''"></textarea>
-                                    <p x-show="playground.error && playground.error.includes('JSON')"
-                                       class="text-xs text-red-400 mt-1" x-text="playground.error"></p>
-                                </div>
-
-                                <!-- Presets -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-400 mb-2">Templates</label>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button @click="loadPlaygroundPreset('simple')"
-                                                class="px-3 py-1 text-xs bg-space-800 text-gray-400 rounded hover:bg-space-700">
-                                            Simple Chat
-                                        </button>
-                                        <button @click="loadPlaygroundPreset('system')"
-                                                class="px-3 py-1 text-xs bg-space-800 text-gray-400 rounded hover:bg-space-700">
-                                            With System
-                                        </button>
-                                        <button @click="loadPlaygroundPreset('tools')"
-                                                class="px-3 py-1 text-xs bg-space-800 text-gray-400 rounded hover:bg-space-700">
-                                            With Tools
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Send Button -->
-                                <button @click="sendPlaygroundRequest()"
-                                        :disabled="playground.loading"
-                                        class="w-full py-3 bg-gradient-to-r from-neon-purple to-blue-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 font-medium flex items-center justify-center gap-2">
-                                    <svg x-show="playground.loading" class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    <span x-text="playground.loading ? 'Sending...' : 'Send Request'"></span>
+                                <button @click="copyAsCurl()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
+                                    Copy as cURL
                                 </button>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Response Panel -->
-                    <div class="space-y-4">
-                        <div class="bg-space-900 border border-space-border rounded-xl p-6 h-full">
-                            <div class="flex items-center justify-between mb-4">
-                                <h2 class="text-lg font-semibold text-white">Response</h2>
-                                <div class="flex items-center gap-4 text-sm">
-                                    <span x-show="playground.statusCode"
-                                          class="px-2 py-0.5 rounded-full text-xs font-mono"
-                                          :class="getHttpStatusClass(playground.statusCode)">
-                                        <span x-text="playground.statusCode"></span>
-                                        <span x-show="playground.statusText" class="text-gray-400" x-text="' ' + playground.statusText"></span>
-                                    </span>
-                                    <span x-show="playground.duration" class="text-gray-500">
-                                        <span x-text="playground.duration"></span>ms
-                                    </span>
-                                    <button @click="playground.response = ''; playground.error = ''; playground.statusCode = null; playground.statusText = ''"
-                                            class="text-gray-400 hover:text-white transition-colors">
-                                        Clear
-                                    </button>
-                                </div>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Model</p>
+                                <p class="text-sm font-bold text-white truncate font-mono" x-text="playground.model"></p>
                             </div>
-
-                            <!-- Response Content -->
-                            <div class="bg-space-950 rounded-lg p-4 h-[calc(100%-60px)] overflow-auto">
-                                <template x-if="playground.error && !playground.error.includes('JSON')">
-                                    <div class="text-red-400 font-mono text-sm whitespace-pre-wrap" x-text="playground.error"></div>
-                                </template>
-                                <template x-if="!playground.error && playground.response">
-                                    <pre class="text-gray-300 font-mono text-sm whitespace-pre-wrap" x-text="typeof playground.response === 'string' ? playground.response : JSON.stringify(playground.response, null, 2)"></pre>
-                                </template>
-                                <template x-if="!playground.error && !playground.response">
-                                    <div class="text-gray-500 text-center py-12">
-                                        <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                        <p>Send a request to see the response</p>
-                                    </div>
-                                </template>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Status</p>
+                                <p class="text-sm font-bold" :class="playground.statusCode ? getHttpStatusClass(playground.statusCode) : 'text-gray-300'" x-text="playground.statusCode || 'N/A'"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Duration</p>
+                                <p class="text-sm font-bold text-neon-cyan"><span x-text="playground.duration || 0"></span>ms</p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Response Mode</p>
+                                <p class="text-sm font-bold" :class="playground.stream ? 'text-emerald-300' : 'text-neon-purple'" x-text="playground.stream ? 'Streaming' : 'JSON'"></p>
                             </div>
                         </div>
                     </div>
+                </section>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold text-white">Request Builder</h2>
+                            <div class="flex items-center gap-2">
+                                <button @click="loadPlaygroundPreset('simple')"
+                                        class="px-2.5 py-1 text-xs rounded-md border border-space-border bg-space-950 text-gray-300 hover:border-gray-500 transition-colors">
+                                    Simple
+                                </button>
+                                <button @click="loadPlaygroundPreset('system')"
+                                        class="px-2.5 py-1 text-xs rounded-md border border-space-border bg-space-950 text-gray-300 hover:border-gray-500 transition-colors">
+                                    System
+                                </button>
+                                <button @click="loadPlaygroundPreset('tools')"
+                                        class="px-2.5 py-1 text-xs rounded-md border border-space-border bg-space-950 text-gray-300 hover:border-gray-500 transition-colors">
+                                    Tools
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Endpoint</label>
+                                <select x-model="playground.endpoint"
+                                        class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                                    <option value="/v1/chat/completions">OpenAI - /v1/chat/completions</option>
+                                    <option value="/v1/messages">Anthropic - /v1/messages</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Model</label>
+                                <select x-model="playground.model"
+                                        @change="updatePlaygroundRequest()"
+                                        class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                                    <template x-for="model in models" :key="model.id">
+                                        <option :value="model.id" x-text="model.id"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+
+                        <label class="inline-flex items-center gap-2 text-sm text-gray-400 cursor-pointer mb-3">
+                            <input type="checkbox" x-model="playground.stream" @change="updatePlaygroundRequest()"
+                                   class="w-4 h-4 rounded bg-space-950 border-space-border text-neon-purple">
+                            Stream response
+                        </label>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Request Body (JSON)</label>
+                            <textarea x-model="playground.request"
+                                      rows="14"
+                                      class="w-full px-4 py-3 bg-space-950 border border-space-border rounded-lg text-white font-mono text-sm focus:border-neon-purple focus:outline-none resize-none"
+                                      :class="playground.error && playground.error.includes('JSON') ? 'border-red-500' : ''"></textarea>
+                            <p x-show="playground.error && playground.error.includes('JSON')"
+                               class="text-xs text-red-400 mt-1" x-text="playground.error"></p>
+                        </div>
+
+                        <button @click="sendPlaygroundRequest()"
+                                :disabled="playground.loading"
+                                class="w-full mt-4 py-3 bg-gradient-to-r from-neon-purple to-blue-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 font-medium flex items-center justify-center gap-2">
+                            <svg x-show="playground.loading" class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span x-text="playground.loading ? 'Sending...' : 'Send Request'"></span>
+                        </button>
+                    </section>
+
+                    <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                            <div>
+                                <h2 class="text-lg font-semibold text-white">Response Inspector</h2>
+                                <p class="text-xs text-gray-500 mt-1">Inspect output payloads, errors, and status metadata.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span x-show="playground.statusCode"
+                                      class="px-2.5 py-1 rounded text-xs font-mono border"
+                                      :class="getHttpStatusClass(playground.statusCode)">
+                                    <span x-text="playground.statusCode"></span>
+                                    <span x-show="playground.statusText" class="text-gray-400" x-text="' ' + playground.statusText"></span>
+                                </span>
+                                <span class="px-2.5 py-1 rounded text-xs border border-space-border bg-space-950 text-gray-400">
+                                    <span x-text="playground.duration || 0"></span>ms
+                                </span>
+                                <button @click="playground.response = ''; playground.error = ''; playground.statusCode = null; playground.statusText = ''"
+                                        class="px-3 py-1.5 text-xs rounded-lg border border-space-border bg-space-950 text-gray-300 hover:border-gray-500 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl bg-space-950 border border-space-border p-4 h-[560px] overflow-auto">
+                            <template x-if="playground.error && !playground.error.includes('JSON')">
+                                <div class="text-red-400 font-mono text-sm whitespace-pre-wrap" x-text="playground.error"></div>
+                            </template>
+                            <template x-if="!playground.error && playground.response">
+                                <pre class="text-gray-300 font-mono text-sm whitespace-pre-wrap" x-text="typeof playground.response === 'string' ? playground.response : JSON.stringify(playground.response, null, 2)"></pre>
+                            </template>
+                            <template x-if="!playground.error && !playground.response">
+                                <div class="text-gray-500 text-center py-16">
+                                    <svg class="w-14 h-14 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <p class="text-gray-400 mb-1">No response yet</p>
+                                    <p class="text-sm text-gray-600">Send a request from the left panel to inspect output here.</p>
+                                </div>
+                            </template>
+                        </div>
+                    </section>
                 </div>
             </div>
             
