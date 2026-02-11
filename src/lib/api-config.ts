@@ -11,8 +11,7 @@ const COPILOT_VERSION = "0.37.0"
 const EDITOR_PLUGIN_VERSION = `copilot-chat/${COPILOT_VERSION}`
 const USER_AGENT = `GitHubCopilotChat/${COPILOT_VERSION}`
 
-// Optional override. Leave unset to let GitHub use its current default version.
-const GITHUB_API_VERSION = process.env.GITHUB_API_VERSION?.trim()
+const API_VERSION = "2025-10-01"
 
 export const copilotBaseUrl = (state: State) =>
   state.accountType === "individual" ?
@@ -31,31 +30,26 @@ export const copilotHeaders = (
     "editor-plugin-version": EDITOR_PLUGIN_VERSION,
     "user-agent": USER_AGENT,
     "openai-intent": "conversation-panel",
+    "x-github-api-version": API_VERSION,
     "x-request-id": randomUUID(),
     "x-vscode-user-agent-library-version": "electron-fetch",
   }
 
-  if (GITHUB_API_VERSION) headers["x-github-api-version"] = GITHUB_API_VERSION
   if (vision) headers["copilot-vision-request"] = "true"
 
   return headers
 }
 
 export const GITHUB_API_BASE_URL = "https://api.github.com"
-export const githubHeaders = (state: State) => {
-  const headers: Record<string, string> = {
-    ...standardHeaders(),
-    authorization: `token ${state.githubToken}`,
-    "editor-version": `vscode/${state.vsCodeVersion}`,
-    "editor-plugin-version": EDITOR_PLUGIN_VERSION,
-    "user-agent": USER_AGENT,
-    "x-vscode-user-agent-library-version": "electron-fetch",
-  }
-
-  if (GITHUB_API_VERSION) headers["x-github-api-version"] = GITHUB_API_VERSION
-
-  return headers
-}
+export const githubHeaders = (state: State) => ({
+  ...standardHeaders(),
+  authorization: `token ${state.githubToken}`,
+  "editor-version": `vscode/${state.vsCodeVersion}`,
+  "editor-plugin-version": EDITOR_PLUGIN_VERSION,
+  "user-agent": USER_AGENT,
+  "x-github-api-version": API_VERSION,
+  "x-vscode-user-agent-library-version": "electron-fetch",
+})
 
 export const GITHUB_BASE_URL = "https://github.com"
 export const GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98"
