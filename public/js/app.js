@@ -36,6 +36,7 @@ document.addEventListener("alpine:init", () => {
     // Models
     models: [],
     modelFilter: 'all',
+    modelSearch: '',
 
     // Usage stats
     usageStats: {
@@ -1596,43 +1597,70 @@ document.addEventListener("alpine:init", () => {
 
     // Get filtered models based on filter
     get filteredModels() {
-      if (this.modelFilter === "all") return this.models
+      let result = this.models
 
-      return this.models.filter((model) => {
-        const id = model.id.toLowerCase()
-        const vendor = (model.vendor || "").toLowerCase()
+      // Apply vendor filter
+      if (this.modelFilter === "all") {
+        result = this.models
+      } else {
+        result = this.models.filter((model) => {
+          const id = model.id.toLowerCase()
+          const vendor = (model.vendor || "").toLowerCase()
 
-        switch (this.modelFilter) {
-          case "openai":
-            return (
-              vendor.includes("openai")
-              || id.includes("gpt")
-              || id.includes("o1")
-              || id.includes("o3")
-              || id.includes("o4")
-            )
-          case "anthropic":
-            return vendor.includes("anthropic") || id.includes("claude")
-          case "google":
-            return (
-              vendor.includes("google") || id.includes("gemini")
-            )
-          case "other":
-            return (
-              !vendor.includes("openai")
-              && !vendor.includes("anthropic")
-              && !vendor.includes("google")
-              && !id.includes("gpt")
-              && !id.includes("o1")
-              && !id.includes("o3")
-              && !id.includes("o4")
-              && !id.includes("claude")
-              && !id.includes("gemini")
-            )
-          default:
-            return true
-        }
-      })
+          switch (this.modelFilter) {
+            case "openai":
+              return (
+                vendor.includes("openai")
+                || id.includes("gpt")
+                || id.includes("o1")
+                || id.includes("o3")
+                || id.includes("o4")
+              )
+            case "anthropic":
+              return vendor.includes("anthropic") || id.includes("claude")
+            case "google":
+              return (
+                vendor.includes("google") || id.includes("gemini")
+              )
+            case "other":
+              return (
+                !vendor.includes("openai")
+                && !vendor.includes("anthropic")
+                && !vendor.includes("google")
+                && !id.includes("gpt")
+                && !id.includes("o1")
+                && !id.includes("o3")
+                && !id.includes("o4")
+                && !id.includes("claude")
+                && !id.includes("gemini")
+              )
+            default:
+              return true
+          }
+        })
+      }
+
+      // Apply search filter
+      if (this.modelSearch && this.modelSearch.trim()) {
+        const search = this.modelSearch.toLowerCase().trim()
+        result = result.filter((model) => {
+          const id = (model.id || "").toLowerCase()
+          const name = (model.name || "").toLowerCase()
+          const vendor = (model.vendor || "").toLowerCase()
+          const family = (model.capabilities?.family || "").toLowerCase()
+          const type = (model.capabilities?.type || "").toLowerCase()
+          
+          return (
+            id.includes(search) ||
+            name.includes(search) ||
+            vendor.includes(search) ||
+            family.includes(search) ||
+            type.includes(search)
+          )
+        })
+      }
+
+      return result
     },
 
     // Get model token limit (handles both flat and nested structure)
