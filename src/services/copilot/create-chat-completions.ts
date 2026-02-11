@@ -4,10 +4,10 @@ import { events } from "fetch-event-stream"
 import { getCurrentAccount, isPoolEnabledSync } from "~/lib/account-pool"
 import { copilotHeaders, copilotBaseUrl } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
+import { fetchWithTimeout } from "~/lib/fetch-with-timeout"
 import { logEmitter } from "~/lib/logger"
 import { state } from "~/lib/state"
 import { getActiveCopilotToken } from "~/lib/token"
-import { fetchCopilotWithCompatibilityRetry } from "~/services/copilot/fetch-copilot"
 
 // Timeout for chat completions (2 minutes for long streaming responses)
 const CHAT_COMPLETION_TIMEOUT = 120000
@@ -49,7 +49,7 @@ export const createChatCompletions = async (
     "X-Initiator": isAgentCall ? "agent" : "user",
   }
 
-  const response = await fetchCopilotWithCompatibilityRetry(
+  const response = await fetchWithTimeout(
     `${copilotBaseUrl(state)}/chat/completions`,
     {
       method: "POST",
@@ -63,12 +63,10 @@ export const createChatCompletions = async (
     // Get account info for error message
     const accountInfo = getAccountInfoForError()
 
-    const rawErrorText = await response.clone().text()
-
     // Try to parse error response
     let errorBody: { error?: { code?: string; message?: string } } | null = null
     try {
-      const parsed: unknown = JSON.parse(rawErrorText) as unknown
+      const parsed: unknown = await response.clone().json()
       if (typeof parsed === "object" && parsed !== null && "error" in parsed) {
         errorBody = parsed as { error?: { code?: string; message?: string } }
       }
@@ -84,7 +82,7 @@ export const createChatCompletions = async (
     // Log to WebUI
     logEmitter.log(
       "error",
-      `API Error ${response.status}: ${errorBody?.error?.message || rawErrorText || response.statusText} (model=${payload.model}, account=${accountInfo})`,
+      `API Error ${response.status}: ${errorBody?.error?.message || response.statusText} (model=${payload.model}, account=${accountInfo})`,
     )
 
     // Check for model_not_supported error

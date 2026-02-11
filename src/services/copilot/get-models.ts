@@ -1,19 +1,16 @@
 import { copilotBaseUrl, copilotHeaders } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
+import { fetchWithTimeout } from "~/lib/fetch-with-timeout"
 import { state } from "~/lib/state"
-import { fetchCopilotWithCompatibilityRetry } from "~/services/copilot/fetch-copilot"
 
 // Timeout for models request (10 seconds)
 const MODELS_TIMEOUT = 10000
 
 export const getModels = async () => {
-  const response = await fetchCopilotWithCompatibilityRetry(
-    `${copilotBaseUrl(state)}/models`,
-    {
-      headers: copilotHeaders(state),
-      timeout: MODELS_TIMEOUT,
-    },
-  )
+  const response = await fetchWithTimeout(`${copilotBaseUrl(state)}/models`, {
+    headers: copilotHeaders(state),
+    timeout: MODELS_TIMEOUT,
+  })
 
   if (!response.ok) throw new HTTPError("Failed to get models", response)
 
