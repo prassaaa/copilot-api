@@ -63,6 +63,6 @@
     "prettier-plugin-packagejson": "^2.5.19",
     "simple-git-hooks": "^2.13.1",
     "tsdown": "^0.15.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.1-rc"
   }
 }
