@@ -536,18 +536,8 @@
                                 <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Usage Operations</p>
                                 <h1 class="text-2xl md:text-3xl font-bold text-white">Usage & Quotas Command Center</h1>
                                 <p class="text-sm text-gray-400 mt-2">
-                                    Pantau kesehatan semua akun Copilot, cek risiko quota rendah, dan identifikasi account yang perlu diprioritaskan.
+                                    Monitor Copilot account health, identify low-quota risk, and prioritize accounts for rotation decisions.
                                 </p>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <button @click="fetchAccountsQuota()"
-                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
-                                    Refresh Quotas
-                                </button>
-                                <button @click="fetchAccounts()"
-                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 transition-colors">
-                                    Sync Accounts
-                                </button>
                             </div>
                         </div>
 
@@ -656,7 +646,7 @@
                             </div>
                         </div>
                         <p class="text-xs text-gray-500 mt-4 leading-relaxed">
-                            Prioritaskan akun dengan status <span class="text-orange-300">Low Quota</span> untuk rotasi otomatis, dan refresh quota setelah perubahan plan akun.
+                            Prioritize accounts with <span class="text-orange-300">Low Quota</span> status for auto-rotation, and refresh quotas after account plan changes.
                         </p>
                     </section>
                 </div>
@@ -664,7 +654,7 @@
                 <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
                     <div>
                         <h2 class="text-xl font-semibold text-white">Per-Account Quota Details</h2>
-                        <p class="text-sm text-gray-500">Rincian quota Chat, Completions, dan Premium Interactions untuk setiap akun.</p>
+                        <p class="text-sm text-gray-500">Detailed Chat, Completions, and Premium Interactions quota breakdown for each account.</p>
                     </div>
                     <div class="text-xs text-gray-500">
                         Updated: <span class="text-gray-300" x-text="new Date().toLocaleTimeString()"></span>
@@ -816,8 +806,8 @@
                                         <svg class="w-8 h-8 mx-auto mb-2 text-gray-600 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                         </svg>
-                                        <p class="text-sm text-gray-400">Quota data belum tersedia</p>
-                                        <p class="text-xs text-gray-500 mt-1">Klik <span class="text-neon-cyan">Refresh Quotas</span> untuk mengambil data terbaru.</p>
+                                        <p class="text-sm text-gray-400">Quota data is not available yet.</p>
+                                        <p class="text-xs text-gray-500 mt-1">Use the Accounts tab controls to refresh and load the latest quota data.</p>
                                     </div>
                                 </template>
 
