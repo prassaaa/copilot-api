@@ -1686,10 +1686,8 @@ document.addEventListener("alpine:init", () => {
 
     get sortedModels() {
       const entries = Object.entries(this.usageStats.byModel || {})
-      if (entries.length === 0) return {}
-      return Object.fromEntries(
-        entries.sort((a, b) => b[1] - a[1])
-      )
+      if (entries.length === 0) return []
+      return entries.sort((a, b) => b[1] - a[1])
     },
 
     get topModelUsage() {
