@@ -260,6 +260,68 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
   })
 }
 
+/**
+ * Normalize tools and tool_choice to OpenAI standard format.
+ * Some clients (e.g. Cursor) send tools without the `type: "function"` wrapper.
+ */
+function normalizeTools(
+  payload: ChatCompletionsPayload,
+): ChatCompletionsPayload {
+  let tools = payload.tools
+  let toolChoice = payload.tool_choice
+
+  if (tools && tools.length > 0) {
+    tools = tools.map((tool) => {
+      const raw = tool as unknown as Record<string, unknown>
+
+      // Already in correct format
+      if (raw.type === "function" && raw.function) {
+        return tool
+      }
+
+      // Tool sent without wrapper — has name/parameters at top level
+      if (raw.name || raw.parameters) {
+        return {
+          type: "function" as const,
+          function: {
+            name: (raw.name as string) || "",
+            description: raw.description as string | undefined,
+            parameters:
+              raw.parameters ? (raw.parameters as Record<string, unknown>) : {},
+          },
+        }
+      }
+
+      return tool
+    })
+  }
+
+  if (
+    toolChoice
+    && typeof toolChoice === "object"
+    && !("function" in toolChoice)
+  ) {
+    const raw = toolChoice as Record<string, unknown>
+    // e.g. { type: "auto" } or { type: "none" } or { type: "required" }
+    if (raw.type === "auto" || raw.type === "none" || raw.type === "required") {
+      toolChoice = raw.type
+    }
+    // e.g. { type: "function", name: "xxx" } without function wrapper
+    else if (raw.type === "function" && raw.name) {
+      toolChoice = {
+        type: "function" as const,
+        function: { name: raw.name as string },
+      }
+    }
+  }
+
+  if (tools !== payload.tools || toolChoice !== payload.tool_choice) {
+    return { ...payload, tools, tool_choice: toolChoice }
+  }
+
+  return payload
+}
+
 function sanitizeMessages(
   payload: ChatCompletionsPayload,
 ): ChatCompletionsPayload {
@@ -380,7 +442,7 @@ export async function handleCompletion(c: Context) {
   consola.debug("Request payload:", JSON.stringify(rawPayload).slice(-400))
 
   const payload = applyMaxTokensIfNeeded(
-    preparePayload(sanitizeMessages(rawPayload)),
+    preparePayload(normalizeTools(sanitizeMessages(rawPayload))),
   )
   const accountInfo =
     isPoolEnabledSync() ? (getCurrentAccount()?.login ?? null) : null
