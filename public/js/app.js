@@ -154,6 +154,7 @@ document.addEventListener("alpine:init", () => {
 
     // Chart instance
     usageChart: null,
+    chartType: "bar", // 'bar' or 'doughnut'
 
     // Request history
     requestHistoryEntries: [],
@@ -189,6 +190,11 @@ document.addEventListener("alpine:init", () => {
 
     // Initialize
     async init() {
+      // Watch for chart type changes
+      this.$watch('chartType', () => {
+        this.updateChart()
+      })
+      
       await this.checkAuth()
 
       if (this.auth.authenticated || !this.auth.passwordRequired) {
@@ -1338,57 +1344,233 @@ document.addEventListener("alpine:init", () => {
       const ctx = document.querySelector("#usageChart")
       if (!ctx) return
 
-      const labels = Object.keys(this.usageStats.byModel || {})
-      const data = Object.values(this.usageStats.byModel || {})
+      const entries = Object.entries(this.usageStats.byModel || {})
+      const labels = entries.map(([model]) => model)
+      const data = entries.map(([, count]) => count)
+      const total = this.usageStats.totalRequests || 0
 
       if (this.usageChart) {
         this.usageChart.destroy()
       }
 
-      this.usageChart = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: "Requests",
-              data: data,
-              backgroundColor: "rgba(168, 85, 247, 0.5)",
-              borderColor: "rgba(168, 85, 247, 1)",
-              borderWidth: 1,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: false,
-            },
+      if (this.chartType === "bar") {
+        // Bar chart configuration
+        const backgroundColors = data.map(count => {
+          const percent = total > 0 ? count / total : 0
+          if (percent > 0.4) return 'rgba(34, 211, 238, 0.7)' // neon-cyan for high usage
+          if (percent > 0.2) return 'rgba(168, 85, 247, 0.7)' // neon-purple for medium usage
+          return 'rgba(168, 85, 247, 0.4)' // lighter purple for low usage
+        })
+
+        const borderColors = data.map(count => {
+          const percent = total > 0 ? count / total : 0
+          if (percent > 0.4) return 'rgba(34, 211, 238, 1)'
+          if (percent > 0.2) return 'rgba(168, 85, 247, 1)'
+          return 'rgba(168, 85, 247, 0.6)'
+        })
+
+        this.usageChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Requests",
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 2,
+                borderRadius: 6,
+                borderSkipped: false,
+                hoverBackgroundColor: 'rgba(34, 211, 238, 0.9)',
+                hoverBorderColor: 'rgba(34, 211, 238, 1)',
+              },
+            ],
           },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: {
-                color: "rgba(255, 255, 255, 0.1)",
-              },
-              ticks: {
-                color: "rgba(255, 255, 255, 0.5)",
-              },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              duration: 800,
+              easing: 'easeOutQuart'
             },
-            x: {
-              grid: {
+            plugins: {
+              legend: {
                 display: false,
               },
-              ticks: {
-                color: "rgba(255, 255, 255, 0.5)",
-                maxRotation: 45,
+              tooltip: {
+                backgroundColor: 'rgba(15, 15, 26, 0.95)',
+                titleColor: '#ffffff',
+                bodyColor: '#a1a1aa',
+                borderColor: 'rgba(168, 85, 247, 0.5)',
+                borderWidth: 1,
+                cornerRadius: 8,
+                padding: 12,
+                displayColors: false,
+                callbacks: {
+                  label: function(context) {
+                    const value = context.raw
+                    const total = context.dataset.data.reduce((a, b) => a + b, 0)
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0
+                    return [
+                      `${value} requests`,
+                      `${percent}% of total`
+                    ]
+                  },
+                  title: function(context) {
+                    return context[0].label
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: {
+                  color: "rgba(255, 255, 255, 0.05)",
+                  drawBorder: false,
+                },
+                ticks: {
+                  color: "rgba(255, 255, 255, 0.4)",
+                  font: {
+                    size: 11,
+                    family: "'Inter', system-ui, sans-serif"
+                  },
+                  padding: 8,
+                },
+              },
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  color: "rgba(255, 255, 255, 0.4)",
+                  font: {
+                    size: 11,
+                    family: "'JetBrains Mono', 'Fira Code', monospace"
+                  },
+                  maxRotation: 45,
+                  minRotation: 30,
+                  padding: 8,
+                },
               },
             },
+            interaction: {
+              intersect: false,
+              mode: 'index',
+            },
           },
-        },
-      })
+        })
+      } else if (this.chartType === "doughnut") {
+        // Doughnut chart configuration
+        const neonColors = [
+          'rgba(34, 211, 238, 0.8)',  // neon-cyan
+          'rgba(168, 85, 247, 0.8)',  // neon-purple
+          'rgba(34, 197, 94, 0.8)',   // neon-green
+          'rgba(251, 191, 36, 0.8)',  // amber
+          'rgba(239, 68, 68, 0.8)',   // red
+          'rgba(59, 130, 246, 0.8)',  // blue
+          'rgba(236, 72, 153, 0.8)',  // pink
+          'rgba(139, 92, 246, 0.8)',  // violet
+        ]
+
+        const borderColors = [
+          'rgba(34, 211, 238, 1)',
+          'rgba(168, 85, 247, 1)',
+          'rgba(34, 197, 94, 1)',
+          'rgba(251, 191, 36, 1)',
+          'rgba(239, 68, 68, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(236, 72, 153, 1)',
+          'rgba(139, 92, 246, 1)',
+        ]
+
+        const backgroundColors = data.map((_, i) => neonColors[i % neonColors.length])
+        const doughnutBorderColors = data.map((_, i) => borderColors[i % borderColors.length])
+
+        this.usageChart = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Requests",
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: doughnutBorderColors,
+                borderWidth: 2,
+                hoverBackgroundColor: backgroundColors.map(c => c.replace('0.8', '1')),
+                hoverBorderColor: doughnutBorderColors,
+                hoverBorderWidth: 3,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              duration: 800,
+              easing: 'easeOutQuart'
+            },
+            cutout: '60%',
+            plugins: {
+              legend: {
+                display: true,
+                position: 'right',
+                labels: {
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  font: {
+                    size: 11,
+                    family: "'Inter', system-ui, sans-serif"
+                  },
+                  padding: 12,
+                  usePointStyle: true,
+                  pointStyle: 'circle',
+                  generateLabels: function(chart) {
+                    const data = chart.data
+                    if (data.labels.length && data.datasets.length) {
+                      return data.labels.map((label, i) => {
+                        const value = data.datasets[0].data[i]
+                        const total = data.datasets[0].data.reduce((a, b) => a + b, 0)
+                        const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0
+                        return {
+                          text: `${label} (${percent}%)`,
+                          fillStyle: data.datasets[0].backgroundColor[i],
+                          hidden: false,
+                          index: i
+                        }
+                      })
+                    }
+                    return []
+                  }
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(15, 15, 26, 0.95)',
+                titleColor: '#ffffff',
+                bodyColor: '#a1a1aa',
+                borderColor: 'rgba(168, 85, 247, 0.5)',
+                borderWidth: 1,
+                cornerRadius: 8,
+                padding: 12,
+                displayColors: true,
+                callbacks: {
+                  label: function(context) {
+                    const value = context.raw
+                    const total = context.dataset.data.reduce((a, b) => a + b, 0)
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0
+                    return `${value} requests (${percent}%)`
+                  }
+                }
+              }
+            },
+            interaction: {
+              intersect: false,
+              mode: 'nearest',
+            },
+          },
+        })
+      }
     },
 
     // Show toast notification
@@ -1495,6 +1677,19 @@ document.addEventListener("alpine:init", () => {
     get avgRequestsPerMinute() {
       const total = this.usageStats.totalRequests || 0
       return (total / 1440).toFixed(2)
+    },
+
+    get avgRequestsPerHour() {
+      const total = this.usageStats.totalRequests || 0
+      return Math.round(total / 24)
+    },
+
+    get sortedModels() {
+      const entries = Object.entries(this.usageStats.byModel || {})
+      if (entries.length === 0) return {}
+      return Object.fromEntries(
+        entries.sort((a, b) => b[1] - a[1])
+      )
     },
 
     get topModelUsage() {
