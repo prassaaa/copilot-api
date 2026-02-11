@@ -2073,7 +2073,26 @@ document.addEventListener("alpine:init", () => {
         }
         if (!response.ok) {
           const text = await response.text()
-          throw new Error(text || `HTTP ${response.status}`)
+          let message = text || `HTTP ${response.status}`
+
+          if (text) {
+            try {
+              const parsed = JSON.parse(text)
+              const parsedMessage = parsed?.error?.message || parsed?.message
+              const parsedCode = parsed?.error?.code || parsed?.code
+
+              if (typeof parsedMessage === "string" && parsedMessage.trim()) {
+                message = parsedMessage
+              }
+              if (typeof parsedCode === "string" && parsedCode.trim()) {
+                message = `${message} (${parsedCode})`
+              }
+            } catch {
+              // Keep raw text fallback
+            }
+          }
+
+          throw new Error(message)
         }
 
         this.playground.duration = Date.now() - startTime

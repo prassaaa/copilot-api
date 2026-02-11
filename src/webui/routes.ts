@@ -791,7 +791,7 @@ webuiRoutes.post("/api/pool-config", async (c) => {
  */
 webuiRoutes.post("/api/accounts/refresh-quotas", async (c) => {
   try {
-    refreshAllQuotas()
+    await refreshAllQuotas()
     const accounts = await getAccountsStatus()
 
     return c.json({

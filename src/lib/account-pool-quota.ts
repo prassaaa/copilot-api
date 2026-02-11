@@ -170,12 +170,12 @@ export function checkAndAutoPauseAccounts(
 export function refreshAllQuotas(
   poolState: PoolState,
   savePoolState: () => void,
-): void {
+): Promise<void> {
   consola.info("Refreshing quota for all accounts...")
   const refreshPromises = poolState.accounts.map((account) =>
     fetchAccountQuota(account, poolState),
   )
-  void Promise.all(refreshPromises).then(() => {
+  return Promise.all(refreshPromises).then(() => {
     savePoolState()
     consola.success("Quota refreshed for all accounts")
   })
@@ -185,7 +185,7 @@ let lastMonthCheck: number | null = null
 
 export function checkMonthlyReset(
   poolState: PoolState,
-  refreshAllQuotasFn: () => void,
+  refreshAllQuotasFn: () => Promise<void> | void,
   savePoolState: () => void,
 ): void {
   const now = new Date()
@@ -214,7 +214,7 @@ export function checkMonthlyReset(
     if (changed) {
       invalidateActiveAccountsCache()
       savePoolState()
-      refreshAllQuotasFn()
+      void refreshAllQuotasFn()
     }
   }
 }

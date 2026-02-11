@@ -321,7 +321,7 @@ export async function getPooledCopilotToken(): Promise<string | null> {
 }
 
 function shouldAutoRotate(
-  errorType: "rate-limit" | "auth" | "other",
+  errorType: "rate-limit" | "auth" | "quota" | "other",
   errorCount: number,
   config: {
     autoRotationEnabled?: boolean
@@ -331,6 +331,7 @@ function shouldAutoRotate(
 ): boolean {
   if (!config.autoRotationEnabled) return false
   if (errorType === "rate-limit") return true
+  if (errorType === "quota") return true
   if (errorType === "other") {
     const threshold = config.autoRotationTriggers.errorCount
     return errorCount >= threshold
@@ -370,33 +371,60 @@ async function rotateToNextAccount({
   }
 }
 
-export async function reportAccountError(
-  errorType: "rate-limit" | "auth" | "other",
+export function reportAccountError(
+  errorType: "rate-limit" | "auth" | "quota" | "other",
   resetAt?: number,
-): Promise<void> {
-  const account = selectAccount()
+): void {
+  const account =
+    (poolState.lastSelectedId ?
+      poolState.accounts.find((a) => a.id === poolState.lastSelectedId)
+    : undefined)
+    ?? (poolState.stickyAccountId ?
+      poolState.accounts.find((a) => a.id === poolState.stickyAccountId)
+    : undefined)
+    ?? selectAccount()
   if (!account) return
 
   const previousAccount = account.login
   account.errorCount++
   account.lastError = errorType
 
-  if (errorType === "rate-limit") {
-    account.rateLimited = true
-    account.rateLimitResetAt = resetAt ?? Date.now() + 60000
-    invalidateActiveAccountsCache()
-    consola.warn(
-      `Account ${account.login} rate limited until ${new Date(account.rateLimitResetAt).toISOString()}`,
-    )
-    await notifyRateLimit(account.login, account.rateLimitResetAt)
-  } else if (errorType === "auth") {
-    account.active = false
-    invalidateActiveAccountsCache()
-    consola.error(`Account ${account.login} auth failed, deactivating`)
-    await notifyAuthError(account.login)
+  switch (errorType) {
+    case "rate-limit": {
+      account.rateLimited = true
+      account.rateLimitResetAt = resetAt ?? Date.now() + 60000
+      invalidateActiveAccountsCache()
+      consola.warn(
+        `Account ${account.login} rate limited until ${new Date(account.rateLimitResetAt).toISOString()}`,
+      )
+      void notifyRateLimit(account.login, account.rateLimitResetAt)
+      break
+    }
+
+    case "quota": {
+      account.paused = true
+      account.pausedReason = "quota"
+      account.rateLimited = false
+      account.rateLimitResetAt = undefined
+      invalidateActiveAccountsCache()
+      consola.warn(`Account ${account.login} quota exceeded, pausing account`)
+      break
+    }
+
+    case "auth": {
+      account.active = false
+      invalidateActiveAccountsCache()
+      consola.error(`Account ${account.login} auth failed, deactivating`)
+      void notifyAuthError(account.login)
+      break
+    }
+
+    default: {
+      break
+    }
   }
 
-  const config = await import("./config").then((m) => m.getConfig())
+  const config = getConfig()
   const doRotate =
     shouldAutoRotate(errorType, account.errorCount, config)
     || poolConfig.strategy === "hybrid"
@@ -413,7 +441,7 @@ export async function reportAccountError(
       consola.info(
         `Auto-rotated from ${previousAccount} to ${nextAccount.login}`,
       )
-      await notifyAccountRotation(previousAccount, nextAccount.login, errorType)
+      void notifyAccountRotation(previousAccount, nextAccount.login, errorType)
     } else {
       poolState.stickyAccountId = undefined
       poolState.currentIndex++
@@ -639,6 +667,7 @@ export function isPoolEnabledSync(): boolean {
 }
 
 export async function refreshAllTokens(): Promise<void> {
+  await ensurePoolStateLoaded()
   let statusChanged = false
   for (const account of poolState.accounts) {
     try {
@@ -651,6 +680,7 @@ export async function refreshAllTokens(): Promise<void> {
       account.active = true
       account.rateLimited = false
       account.errorCount = 0
+      account.lastError = undefined
     } catch (error) {
       if (account.active) {
         statusChanged = true
@@ -671,8 +701,14 @@ export async function fetchAccountQuota(
   return fetchAccountQuotaInternal(account, poolState)
 }
 
-export function refreshAllQuotas(): void {
-  refreshAllQuotasInternal(poolState, savePoolState)
+export async function refreshAllQuotas(): Promise<void> {
+  await ensurePoolStateLoaded()
+  await refreshAllQuotasInternal(poolState, savePoolState)
+  checkAndAutoPauseAccountsInternal(
+    poolState,
+    rotateToNextAccount,
+    savePoolState,
+  )
 }
 
 export function checkAndAutoPauseAccounts(): void {

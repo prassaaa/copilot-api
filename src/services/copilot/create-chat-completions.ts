@@ -1,7 +1,11 @@
 import consola from "consola"
 import { events } from "fetch-event-stream"
 
-import { getCurrentAccount, isPoolEnabledSync } from "~/lib/account-pool"
+import {
+  getCurrentAccount,
+  isPoolEnabledSync,
+  reportAccountError,
+} from "~/lib/account-pool"
 import { copilotHeaders, copilotBaseUrl } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
 import { fetchWithTimeout } from "~/lib/fetch-with-timeout"
@@ -11,6 +15,7 @@ import { getActiveCopilotToken } from "~/lib/token"
 
 // Timeout for chat completions (2 minutes for long streaming responses)
 const CHAT_COMPLETION_TIMEOUT = 120000
+type CopilotErrorBody = { error?: { code?: string; message?: string } }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -164,6 +169,128 @@ function getAccountInfoForError(): string {
   return state.githubUser?.login || "Primary Account"
 }
 
+function extractErrorCode(
+  errorBody: CopilotErrorBody | null,
+): string | undefined {
+  return errorBody?.error?.code?.toLowerCase()
+}
+
+function extractErrorMessage(errorBody: CopilotErrorBody | null): string {
+  return errorBody?.error?.message?.toLowerCase() ?? ""
+}
+
+function isQuotaExceededError(errorBody: CopilotErrorBody | null): boolean {
+  const code = extractErrorCode(errorBody)
+  const message = extractErrorMessage(errorBody)
+  return (
+    code === "quota_exceeded"
+    || code === "insufficient_quota"
+    || message.includes("no quota")
+    || message.includes("quota exceeded")
+  )
+}
+
+function getRateLimitResetAt(response: Response): number | undefined {
+  const retryAfterRaw = response.headers.get("retry-after")
+  if (!retryAfterRaw) return undefined
+
+  const retrySeconds = Number.parseInt(retryAfterRaw, 10)
+  if (!Number.isNaN(retrySeconds)) {
+    return Date.now() + retrySeconds * 1000
+  }
+
+  const retryAt = Date.parse(retryAfterRaw)
+  if (!Number.isNaN(retryAt)) {
+    return retryAt
+  }
+
+  return undefined
+}
+
+async function parseCopilotErrorBody(
+  response: Response,
+): Promise<CopilotErrorBody | null> {
+  try {
+    const parsed: unknown = await response.clone().json()
+    if (typeof parsed === "object" && parsed !== null && "error" in parsed) {
+      return parsed as CopilotErrorBody
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null
+}
+
+function reportPoolError(
+  response: Response,
+  errorBody: CopilotErrorBody | null,
+): void {
+  if (!isPoolEnabledSync()) {
+    return
+  }
+
+  const status = response.status
+  if (status === 429) {
+    reportAccountError("rate-limit", getRateLimitResetAt(response))
+    return
+  }
+  if (status === 401 || status === 403) {
+    reportAccountError("auth")
+    return
+  }
+  if (isQuotaExceededError(errorBody)) {
+    reportAccountError("quota")
+    return
+  }
+
+  reportAccountError("other")
+}
+
+async function handleFailedCompletion(params: {
+  response: Response
+  payload: ChatCompletionsPayload
+}): Promise<never> {
+  const { response, payload } = params
+
+  const accountInfo = getAccountInfoForError()
+  const errorBody = await parseCopilotErrorBody(response)
+
+  consola.error("Failed to create chat completions", response)
+  consola.error(`Account: ${accountInfo}`)
+  consola.error(`Model requested: ${payload.model}`)
+
+  logEmitter.log(
+    "error",
+    `API Error ${response.status}: ${errorBody?.error?.message || response.statusText} (model=${payload.model}, account=${accountInfo})`,
+  )
+
+  try {
+    reportPoolError(response, errorBody)
+  } catch (rotationError) {
+    consola.warn(
+      "Failed to record account error for pool rotation:",
+      rotationError,
+    )
+  }
+
+  if (errorBody?.error?.code === "model_not_supported") {
+    consola.box(
+      `⚠️  Model "${payload.model}" is not supported for this account.\n\n`
+        + `Account: ${accountInfo}\n\n`
+        + `To fix this:\n`
+        + `1. Go to https://github.com/settings/copilot\n`
+        + `2. Enable the model in "Models" section\n`
+        + `3. Or use a different model that is already enabled`,
+    )
+    logEmitter.log(
+      "warn",
+      `Model "${payload.model}" not supported for account ${accountInfo}`,
+    )
+  }
+
+  throw new HTTPError("Failed to create chat completions", response)
+}
+
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
 ) => {
@@ -201,48 +328,10 @@ export const createChatCompletions = async (
   )
 
   if (!response.ok) {
-    // Get account info for error message
-    const accountInfo = getAccountInfoForError()
-
-    // Try to parse error response
-    let errorBody: { error?: { code?: string; message?: string } } | null = null
-    try {
-      const parsed: unknown = await response.clone().json()
-      if (typeof parsed === "object" && parsed !== null && "error" in parsed) {
-        errorBody = parsed as { error?: { code?: string; message?: string } }
-      }
-    } catch {
-      // Ignore parse errors
-    }
-
-    // Enhanced error logging
-    consola.error("Failed to create chat completions", response)
-    consola.error(`Account: ${accountInfo}`)
-    consola.error(`Model requested: ${normalizedPayload.model}`)
-
-    // Log to WebUI
-    logEmitter.log(
-      "error",
-      `API Error ${response.status}: ${errorBody?.error?.message || response.statusText} (model=${normalizedPayload.model}, account=${accountInfo})`,
-    )
-
-    // Check for model_not_supported error
-    if (errorBody?.error?.code === "model_not_supported") {
-      consola.box(
-        `⚠️  Model "${normalizedPayload.model}" is not supported for this account.\n\n`
-          + `Account: ${accountInfo}\n\n`
-          + `To fix this:\n`
-          + `1. Go to https://github.com/settings/copilot\n`
-          + `2. Enable the model in "Models" section\n`
-          + `3. Or use a different model that is already enabled`,
-      )
-      logEmitter.log(
-        "warn",
-        `Model "${normalizedPayload.model}" not supported for account ${accountInfo}`,
-      )
-    }
-
-    throw new HTTPError("Failed to create chat completions", response)
+    return handleFailedCompletion({
+      response,
+      payload: normalizedPayload,
+    })
   }
 
   if (normalizedPayload.stream) {
