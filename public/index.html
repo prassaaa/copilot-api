@@ -849,207 +849,199 @@
             </div>
 
             <!-- Models View -->
-            <div x-show="activeTab === 'models'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <div>
-                        <h1 class="text-2xl font-bold text-white mb-1">Available Models</h1>
-                        <p class="text-sm text-gray-500">Explore and manage available AI models</p>
+            <div x-show="activeTab === 'models'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-16 -right-16 h-52 w-52 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-16 -left-12 h-60 w-60 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="relative space-y-5">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Model Catalog</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">Available Models</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Explore providers, capabilities, and limit profiles across all models currently exposed by your API endpoint.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Visible</span>
+                                    <span class="ml-1 font-semibold text-white" x-text="filteredModels.length"></span>
+                                </div>
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Total</span>
+                                    <span class="ml-1 font-semibold text-white" x-text="models.length"></span>
+                                </div>
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Preview</span>
+                                    <span class="ml-1 font-semibold text-yellow-300" x-text="filteredModels.filter((m) => m.preview).length"></span>
+                                </div>
+                                <div class="px-3 py-2 rounded-lg border border-space-border bg-space-950/70 text-xs">
+                                    <span class="text-gray-500">Tool-ready</span>
+                                    <span class="ml-1 font-semibold text-emerald-300" x-text="filteredModels.filter((m) => modelSupports(m, 'toolCalls')).length"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row md:items-center gap-3">
+                            <div class="relative flex-1 max-w-xl">
+                                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                </svg>
+                                <input type="text" x-model="modelSearch" placeholder="Search by id, vendor, family, type..."
+                                       class="w-full pl-10 pr-4 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                            </div>
+                            <button @click="modelSearch = ''; modelFilter = 'all'"
+                                    class="px-4 py-2.5 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 transition-colors">
+                                Clear Filters
+                            </button>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <!-- Search -->
-                        <div class="relative">
-                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                </section>
+
+                <section class="bg-space-900 border border-space-border rounded-2xl p-4 md:p-5">
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="modelFilter = 'all'"
+                                class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                                :class="modelFilter === 'all' ? 'bg-neon-purple text-white shadow-lg shadow-neon-purple/20' : 'bg-space-950 text-gray-400 hover:text-white border border-space-border'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                            </svg>
+                            All Models
+                        </button>
+                        <button @click="modelFilter = 'openai'"
+                                class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                                :class="modelFilter === 'openai' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-space-950 text-gray-400 hover:text-white border border-space-border'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                            OpenAI
+                        </button>
+                        <button @click="modelFilter = 'anthropic'"
+                                class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                                :class="modelFilter === 'anthropic' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'bg-space-950 text-gray-400 hover:text-white border border-space-border'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                            </svg>
+                            Anthropic
+                        </button>
+                        <button @click="modelFilter = 'google'"
+                                class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                                :class="modelFilter === 'google' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-space-950 text-gray-400 hover:text-white border border-space-border'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                             </svg>
-                            <input type="text" x-model="modelSearch" placeholder="Search models..."
-                                   class="pl-10 pr-4 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none w-64">
-                        </div>
-                        <!-- Count Badge -->
-                        <div class="text-sm text-gray-400">
-                            <span class="text-white font-semibold" x-text="filteredModels.length"></span> of <span class="text-white font-semibold" x-text="models.length"></span> models
-                        </div>
+                            Google
+                        </button>
+                        <button @click="modelFilter = 'other'"
+                                class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                                :class="modelFilter === 'other' ? 'bg-gray-500 text-white shadow-lg shadow-gray-500/20' : 'bg-space-950 text-gray-400 hover:text-white border border-space-border'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                            </svg>
+                            Other
+                        </button>
                     </div>
-                </div>
+                </section>
 
-                <!-- Filter Tabs -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-1.5 mb-6 inline-flex gap-1">
-                    <button @click="modelFilter = 'all'"
-                            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
-                            :class="modelFilter === 'all' ? 'bg-neon-purple text-white shadow-lg shadow-neon-purple/20' : 'text-gray-400 hover:text-white hover:bg-space-800'">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-                        </svg>
-                        All Models
-                    </button>
-                    <button @click="modelFilter = 'openai'"
-                            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
-                            :class="modelFilter === 'openai' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-gray-400 hover:text-white hover:bg-space-800'">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                        </svg>
-                        OpenAI
-                    </button>
-                    <button @click="modelFilter = 'anthropic'"
-                            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
-                            :class="modelFilter === 'anthropic' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white hover:bg-space-800'">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                        </svg>
-                        Anthropic
-                    </button>
-                    <button @click="modelFilter = 'google'"
-                            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
-                            :class="modelFilter === 'google' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-white hover:bg-space-800'">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                        </svg>
-                        Google
-                    </button>
-                    <button @click="modelFilter = 'other'"
-                            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
-                            :class="modelFilter === 'other' ? 'bg-gray-500 text-white shadow-lg shadow-gray-500/20' : 'text-gray-400 hover:text-white hover:bg-space-800'">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
-                        </svg>
-                        Other
-                    </button>
-                </div>
-
-                <!-- Models Grid -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                    <template x-for="(model, index) in filteredModels" :key="index">
-                        <div class="bg-space-900 border border-space-border rounded-2xl overflow-hidden hover:border-neon-purple/50 hover:shadow-xl hover:shadow-neon-purple/10 transition-all duration-300 group">
-                            <!-- Header with Gradient -->
-                            <div class="relative p-5 bg-gradient-to-br from-space-900 to-space-950 border-b border-space-border/50">
-                                <div class="flex items-start justify-between">
-                                    <div class="flex-1 min-w-0">
-                                        <!-- Model Name with Badge -->
-                                        <div class="flex items-center gap-2 mb-1">
+                    <template x-for="(model, index) in filteredModels" :key="model.id || index">
+                        <article class="relative overflow-hidden bg-space-900 border border-space-border rounded-2xl transition-all duration-300 hover:border-neon-purple/50 hover:shadow-xl hover:shadow-neon-purple/10">
+                            <div class="pointer-events-none absolute -top-16 -right-12 h-40 w-40 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                            <div class="relative p-5 space-y-4">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2 mb-1 flex-wrap">
                                             <h3 class="font-bold text-white text-lg truncate" x-text="model.id" :title="model.id"></h3>
-                                            <span x-show="model.preview" class="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 rounded-full flex-shrink-0">
+                                            <span x-show="model.preview" class="px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold bg-yellow-500/20 text-yellow-300 rounded">
                                                 Preview
                                             </span>
-                                            <span x-show="model.policy?.state === 'accepted'" class="px-2 py-0.5 text-xs font-medium bg-blue-500/20 text-blue-400 rounded-full flex-shrink-0">
+                                            <span x-show="model.policy?.state === 'accepted'" class="px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold bg-blue-500/20 text-blue-300 rounded">
                                                 Policy
                                             </span>
                                         </div>
-                                        <!-- Vendor & Version -->
-                                        <div class="flex items-center gap-2 text-sm">
-                                            <span class="px-2 py-0.5 rounded-md text-xs font-medium"
+                                        <div class="flex items-center gap-2 text-xs">
+                                            <span class="px-2 py-0.5 rounded font-medium"
                                                   :class="{
-                                                      'bg-emerald-500/10 text-emerald-400': model.vendor?.toLowerCase().includes('openai') || model.id?.toLowerCase().includes('gpt'),
-                                                      'bg-orange-500/10 text-orange-400': model.vendor?.toLowerCase().includes('anthropic') || model.id?.toLowerCase().includes('claude'),
-                                                      'bg-blue-500/10 text-blue-400': model.vendor?.toLowerCase().includes('google') || model.id?.toLowerCase().includes('gemini'),
-                                                      'bg-gray-500/10 text-gray-400': !model.vendor?.toLowerCase().includes('openai') && !model.vendor?.toLowerCase().includes('anthropic') && !model.vendor?.toLowerCase().includes('google')
+                                                      'bg-emerald-500/15 text-emerald-300': model.vendor?.toLowerCase().includes('openai') || model.id?.toLowerCase().includes('gpt'),
+                                                      'bg-orange-500/15 text-orange-300': model.vendor?.toLowerCase().includes('anthropic') || model.id?.toLowerCase().includes('claude'),
+                                                      'bg-blue-500/15 text-blue-300': model.vendor?.toLowerCase().includes('google') || model.id?.toLowerCase().includes('gemini'),
+                                                      'bg-gray-500/15 text-gray-300': !model.vendor?.toLowerCase().includes('openai') && !model.vendor?.toLowerCase().includes('anthropic') && !model.vendor?.toLowerCase().includes('google')
                                                   }"
-                                                  x-text="model.vendor || 'Unknown'"></span>
-                                            <span x-show="model.version" class="text-gray-500">v<span x-text="model.version"></span></span>
+                                                  x-text="model.vendor || 'Unknown'">
+                                            </span>
+                                            <span class="text-gray-500" x-show="model.version">v<span x-text="model.version"></span></span>
                                         </div>
                                     </div>
-                                    <!-- Copy Button -->
                                     <button @click="copyModelId(model.id)"
                                             class="p-2 text-gray-400 hover:text-neon-cyan hover:bg-neon-cyan/10 rounded-lg transition-all duration-200"
                                             title="Copy model ID">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                         </svg>
                                     </button>
                                 </div>
-                            </div>
 
-                            <!-- Content -->
-                            <div class="p-5 space-y-4">
-                                <!-- Model Info -->
                                 <div class="grid grid-cols-2 gap-3 text-sm">
-                                    <div class="bg-space-950/50 rounded-lg p-3 border border-space-border/30">
+                                    <div class="rounded-lg bg-space-950/70 border border-space-border/50 p-3">
                                         <div class="text-gray-500 text-xs mb-1">Family</div>
                                         <div class="text-white font-medium truncate" x-text="model.capabilities?.family || 'N/A'"></div>
                                     </div>
-                                    <div class="bg-space-950/50 rounded-lg p-3 border border-space-border/30">
+                                    <div class="rounded-lg bg-space-950/70 border border-space-border/50 p-3">
                                         <div class="text-gray-500 text-xs mb-1">Type</div>
                                         <div class="text-white font-medium truncate" x-text="model.capabilities?.type || 'N/A'"></div>
                                     </div>
                                 </div>
 
-                                <!-- Token Limits -->
-                                <div class="bg-space-950/80 rounded-xl p-4 border border-space-border/30">
-                                    <div class="flex items-center justify-between mb-3">
-                                        <div class="flex items-center gap-2 text-gray-400 text-sm">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
-                                            </svg>
-                                            <span class="font-medium">Token Limits</span>
-                                        </div>
-                                    </div>
+                                <div class="rounded-xl bg-space-950/80 border border-space-border/40 p-4">
+                                    <div class="text-gray-400 text-xs font-medium mb-3 uppercase tracking-wider">Token Limits</div>
                                     <div class="grid grid-cols-3 gap-2">
-                                        <div class="text-center p-2 rounded-lg bg-space-900/50 border border-space-border/20">
-                                            <div class="text-neon-cyan font-bold text-base" x-text="formatNumber(getModelLimit(model, 'maxContextTokens'))"></div>
-                                            <div class="text-gray-500 text-xs mt-0.5">Context</div>
+                                        <div class="text-center p-2 rounded-lg bg-space-900/60 border border-space-border/20">
+                                            <div class="text-neon-cyan font-bold text-sm" x-text="formatNumber(getModelLimit(model, 'maxContextTokens'))"></div>
+                                            <div class="text-gray-500 text-[11px] mt-0.5">Context</div>
                                         </div>
-                                        <div class="text-center p-2 rounded-lg bg-space-900/50 border border-space-border/20">
-                                            <div class="text-neon-purple font-bold text-base" x-text="formatNumber(getModelLimit(model, 'maxOutputTokens'))"></div>
-                                            <div class="text-gray-500 text-xs mt-0.5">Output</div>
+                                        <div class="text-center p-2 rounded-lg bg-space-900/60 border border-space-border/20">
+                                            <div class="text-neon-purple font-bold text-sm" x-text="formatNumber(getModelLimit(model, 'maxOutputTokens'))"></div>
+                                            <div class="text-gray-500 text-[11px] mt-0.5">Output</div>
                                         </div>
-                                        <div class="text-center p-2 rounded-lg bg-space-900/50 border border-space-border/20">
-                                            <div class="text-neon-green font-bold text-base" x-text="formatNumber(getModelLimit(model, 'maxPromptTokens'))"></div>
-                                            <div class="text-gray-500 text-xs mt-0.5">Prompt</div>
+                                        <div class="text-center p-2 rounded-lg bg-space-900/60 border border-space-border/20">
+                                            <div class="text-emerald-300 font-bold text-sm" x-text="formatNumber(getModelLimit(model, 'maxPromptTokens'))"></div>
+                                            <div class="text-gray-500 text-[11px] mt-0.5">Prompt</div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Capabilities -->
                                 <div>
-                                    <div class="text-gray-400 text-xs font-medium mb-2">Capabilities</div>
+                                    <div class="text-gray-400 text-xs font-medium mb-2 uppercase tracking-wider">Capabilities</div>
                                     <div class="flex flex-wrap gap-2">
-                                        <span x-show="modelSupports(model, 'toolCalls')"
-                                              class="px-3 py-1.5 text-xs font-medium bg-neon-green/10 text-neon-green rounded-full border border-neon-green/20 flex items-center gap-1.5">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                            </svg>
+                                        <span x-show="modelSupports(model, 'toolCalls')" class="px-3 py-1 text-[11px] font-medium bg-emerald-500/15 text-emerald-300 rounded-full border border-emerald-500/30">
                                             Tool Calls
                                         </span>
-                                        <span x-show="modelSupports(model, 'parallelToolCalls')"
-                                              class="px-3 py-1.5 text-xs font-medium bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-                                            </svg>
+                                        <span x-show="modelSupports(model, 'parallelToolCalls')" class="px-3 py-1 text-[11px] font-medium bg-neon-green/15 text-neon-green rounded-full border border-neon-green/30">
                                             Parallel Tools
                                         </span>
-                                        <span x-show="modelSupports(model, 'dimensions')"
-                                              class="px-3 py-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20 flex items-center gap-1.5">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
-                                            </svg>
+                                        <span x-show="modelSupports(model, 'dimensions')" class="px-3 py-1 text-[11px] font-medium bg-blue-500/15 text-blue-300 rounded-full border border-blue-500/30">
                                             Dimensions
                                         </span>
-                                        <span x-show="model.modelPickerEnabled"
-                                              class="px-3 py-1.5 text-xs font-medium bg-purple-500/10 text-purple-400 rounded-full border border-purple-500/20 flex items-center gap-1.5">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-                                            </svg>
+                                        <span x-show="model.modelPickerEnabled" class="px-3 py-1 text-[11px] font-medium bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/30">
                                             Picker
                                         </span>
-                                        <span x-show="model.capabilities?.tokenizer"
-                                              class="px-3 py-1.5 text-xs font-medium bg-gray-500/10 text-gray-300 rounded-full border border-gray-500/20"
-                                              x-text="model.capabilities?.tokenizer"></span>
-                                        <span x-show="getModelLimit(model, 'maxInputs')"
-                                              class="px-3 py-1.5 text-xs font-medium bg-pink-500/10 text-pink-400 rounded-full border border-pink-500/20 flex items-center gap-1.5">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
-                                            </svg>
-                                            <span x-text="getModelLimit(model, 'maxInputs') + ' inputs'"></span>
+                                        <span x-show="model.capabilities?.tokenizer" class="px-3 py-1 text-[11px] font-medium bg-gray-500/15 text-gray-300 rounded-full border border-gray-500/30"
+                                              x-text="model.capabilities?.tokenizer">
+                                        </span>
+                                        <span x-show="getModelLimit(model, 'maxInputs')" class="px-3 py-1 text-[11px] font-medium bg-pink-500/15 text-pink-300 rounded-full border border-pink-500/30"
+                                              x-text="getModelLimit(model, 'maxInputs') + ' inputs'">
                                         </span>
                                     </div>
-                                    <div x-show="!modelSupports(model, 'toolCalls') && !modelSupports(model, 'parallelToolCalls') && !modelSupports(model, 'dimensions') && !model.modelPickerEnabled" 
-                                          class="text-gray-600 text-xs italic">No special capabilities</div>
+                                    <div x-show="!modelSupports(model, 'toolCalls') && !modelSupports(model, 'parallelToolCalls') && !modelSupports(model, 'dimensions') && !model.modelPickerEnabled"
+                                         class="text-gray-600 text-xs italic mt-2">
+                                        No special capabilities
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </article>
                     </template>
                 </div>
 
-                <!-- No models found -->
                 <div x-show="filteredModels.length === 0 && models.length > 0" class="text-center py-16">
                     <div class="w-20 h-20 mx-auto mb-4 bg-space-900 rounded-full flex items-center justify-center">
                         <svg class="w-10 h-10 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1057,14 +1049,13 @@
                         </svg>
                     </div>
                     <h3 class="text-lg font-semibold text-gray-400 mb-2">No models found</h3>
-                    <p class="text-gray-500 text-sm mb-4">No models match your current filter</p>
-                    <button @click="modelFilter = 'all'; modelSearch = ''" 
+                    <p class="text-gray-500 text-sm mb-4">No models match your current filter.</p>
+                    <button @click="modelFilter = 'all'; modelSearch = ''"
                             class="px-5 py-2.5 bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors font-medium">
                         Show All Models
                     </button>
                 </div>
 
-                <!-- No models available -->
                 <div x-show="models.length === 0" class="text-center py-16">
                     <div class="w-20 h-20 mx-auto mb-4 bg-space-900 rounded-full flex items-center justify-center">
                         <svg class="w-10 h-10 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1072,7 +1063,7 @@
                         </svg>
                     </div>
                     <h3 class="text-lg font-semibold text-gray-400 mb-2">No models available</h3>
-                    <p class="text-gray-500 text-sm">Please configure your API to see available models</p>
+                    <p class="text-gray-500 text-sm">Please configure your API to see available models.</p>
                 </div>
             </div>
             
