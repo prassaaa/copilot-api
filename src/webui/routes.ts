@@ -8,8 +8,6 @@
  * - Live server logs streaming
  */
 
-import type { Context } from "hono"
-
 import { Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 import { streamSSE } from "hono/streaming"
@@ -218,7 +216,7 @@ webuiRoutes.get("/api/auth-status", (c) => {
 /**
  * Middleware to check authentication for protected routes
  */
-webuiRoutes.use("/api/*", async (c: Context, next) => {
+webuiRoutes.use("/api/*", async (c, next) => {
   // Skip auth check for login and auth-status endpoints
   const path = c.req.path
   if (
