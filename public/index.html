@@ -45,11 +45,26 @@
         ::-webkit-scrollbar-thumb { background: #3f3f5a; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #5f5f7a; }
 
-        /* Nav item active state */
+        /* Sidebar nav items */
+        .nav-item {
+            border: 1px solid transparent;
+            border-radius: 0.85rem;
+            position: relative;
+        }
+
         .nav-item.active {
-            background: linear-gradient(90deg, rgba(168, 85, 247, 0.1), transparent);
-            border-left: 2px solid #a855f7;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(34, 211, 238, 0.08));
+            border-color: rgba(168, 85, 247, 0.45);
             color: white;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 20px rgba(8, 8, 16, 0.35);
+        }
+
+        .nav-item.active .nav-icon {
+            color: #22d3ee;
+        }
+
+        .nav-item:hover .nav-icon {
+            color: #d4d4d8;
         }
 
         /* Glow effects */
@@ -113,56 +128,70 @@
     </div>
 
     <!-- Navbar -->
-    <nav class="h-14 border-b border-space-border flex items-center px-6 justify-between bg-space-900/50 backdrop-blur-md sticky top-0 z-40">
-        <div class="flex items-center gap-3">
-            <img
-                src="/favicon.svg"
-                alt="Copilot API"
-                class="h-8 w-8"
-            />
-            <div class="flex flex-col">
-                <span class="text-sm font-bold tracking-wide text-white">COPILOT API</span>
-                <span class="text-[10px] text-gray-500 font-mono tracking-wider">PROXY CONSOLE</span>
-            </div>
-        </div>
-        
-        <div class="flex items-center gap-4">
-            <!-- Pool Mode Badge -->
-            <div x-show="accountPool.enabled"
-                 class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono border bg-neon-purple/10 border-neon-purple/20 text-neon-purple">
-                <div class="w-1.5 h-1.5 rounded-full bg-neon-purple glow-purple"></div>
-                <span>Pool Mode</span>
-                <span class="text-gray-400">•</span>
-                <span x-text="accountPool.configuredCount || accountPool.accounts.length"></span>
+    <nav class="h-16 border-b border-space-border/80 bg-space-900/70 backdrop-blur-xl sticky top-0 z-40">
+        <div class="h-full px-4 md:px-6 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="h-10 w-10 rounded-xl border border-space-border/70 bg-space-950/80 flex items-center justify-center shrink-0">
+                    <img
+                        src="/favicon.svg"
+                        alt="Copilot API"
+                        class="h-6 w-6"
+                    />
+                </div>
+                <div class="min-w-0">
+                    <p class="text-sm font-bold tracking-wide text-white">Copilot API Console</p>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-500 font-mono tracking-wider uppercase">Operations Panel</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider border border-neon-purple/30 bg-neon-purple/15 text-neon-purple"
+                              x-text="activeTab ? (activeTab.charAt(0).toUpperCase() + activeTab.slice(1)) : 'Dashboard'"></span>
+                    </div>
+                </div>
             </div>
 
-            <!-- Connection Status -->
-            <div class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono border"
-                 :class="status.connected
-                     ? 'bg-neon-green/10 border-neon-green/20 text-neon-green'
-                     : 'bg-red-500/10 border-red-500/20 text-red-500'">
-                <div class="w-1.5 h-1.5 rounded-full"
-                     :class="status.connected ? 'bg-neon-green glow-green' : 'bg-red-500'"></div>
-                <span x-text="status.connected ? 'Online' : 'Offline'"></span>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <!-- Pool Mode Badge -->
+                <div x-show="accountPool.enabled"
+                     class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono border bg-neon-purple/10 border-neon-purple/25 text-neon-purple">
+                    <div class="w-1.5 h-1.5 rounded-full bg-neon-purple glow-purple"></div>
+                    <span>Pool</span>
+                    <span class="text-gray-500">•</span>
+                    <span x-text="accountPool.configuredCount || accountPool.accounts.length"></span>
+                </div>
+
+                <!-- Connection Status -->
+                <div class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono border"
+                     :class="status.connected
+                         ? 'bg-neon-green/10 border-neon-green/25 text-neon-green'
+                         : 'bg-red-500/10 border-red-500/25 text-red-400'">
+                    <div class="w-1.5 h-1.5 rounded-full"
+                         :class="status.connected ? 'bg-neon-green glow-green' : 'bg-red-500'"></div>
+                    <span x-text="status.connected ? 'Online' : 'Offline'"></span>
+                </div>
+
+                <div class="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-space-border bg-space-950/70">
+                    <span class="text-gray-500">Req 24h</span>
+                    <span class="font-semibold text-gray-200" x-text="usageStats.totalRequests || 0"></span>
+                </div>
+
+                <!-- Refresh Button -->
+                <button @click="fetchData()"
+                        :disabled="loading"
+                        x-show="auth.authenticated || !auth.passwordRequired"
+                        class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-300 border border-space-border bg-space-950/70 hover:text-white hover:border-gray-500 transition-colors disabled:opacity-50">
+                    <svg class="w-4 h-4" :class="{'animate-spin': loading}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span x-text="loading ? 'Syncing' : 'Refresh'"></span>
+                </button>
+
+                <!-- Logout Button -->
+                <button @click="logout()"
+                        x-show="auth.authenticated && auth.passwordRequired"
+                        class="px-3 py-2 rounded-lg text-xs font-medium text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-colors">
+                    Logout
+                </button>
             </div>
-
-            <!-- Refresh Button -->
-            <button @click="fetchData()"
-                    :disabled="loading"
-                    x-show="auth.authenticated || !auth.passwordRequired"
-                    class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50">
-                <svg class="w-4 h-4" :class="{'animate-spin': loading}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </button>
-
-            <!-- Logout Button -->
-            <button @click="logout()"
-                    x-show="auth.authenticated && auth.passwordRequired"
-                    class="px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 transition-colors">
-                Logout
-            </button>
         </div>
     </nav>
 
@@ -258,119 +287,177 @@
     </template>
 
     <!-- Layout -->
-    <div class="flex h-[calc(100vh-56px)]" x-show="auth.authenticated || !auth.passwordRequired">
-        
+    <div class="flex h-[calc(100vh-64px)]" x-show="auth.authenticated || !auth.passwordRequired">
+
         <!-- Sidebar -->
-        <aside class="w-64 border-r border-space-border bg-space-900/30 flex flex-col py-6 flex-shrink-0">
-            
-            <div class="px-4 mb-2 text-xs font-bold text-gray-600 uppercase tracking-widest">Main</div>
-            <nav class="flex flex-col gap-1">
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'dashboard'}"
-                        @click="activeTab = 'dashboard'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                    </svg>
-                    <span>Dashboard</span>
-                </button>
-                
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'models'}"
-                        @click="activeTab = 'models'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <span>Models</span>
-                    <span class="ml-auto px-2 py-0.5 text-xs rounded-full bg-neon-purple/20 text-neon-purple"
-                          x-text="models.length"></span>
-                </button>
-            </nav>
-            
-            <div class="px-4 mt-8 mb-2 text-xs font-bold text-gray-600 uppercase tracking-widest">System</div>
-            <nav class="flex flex-col gap-1">
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'usage'}"
-                        @click="activeTab = 'usage'; fetchAccountsQuota()">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    <span>Usage</span>
-                </button>
+        <aside class="w-72 border-r border-space-border bg-space-900/45 backdrop-blur-md flex flex-col p-4 gap-4 flex-shrink-0 overflow-hidden">
 
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'accounts'}"
-                        @click="activeTab = 'accounts'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    <span>Accounts</span>
-                    <span class="ml-auto px-2 py-0.5 text-xs rounded-full bg-neon-purple/20 text-neon-purple"
-                          x-text="accountPool.configuredCount || accountPool.accounts.length"></span>
-                </button>
-                
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'logs'}"
-                        @click="activeTab = 'logs'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                              d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Logs</span>
-                </button>
-                
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'settings'}"
-                        @click="activeTab = 'settings'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span>Settings</span>
-                </button>
-            </nav>
+            <div class="rounded-2xl border border-space-border/70 bg-space-950/75 p-4">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">Workspace</p>
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] border"
+                          :class="status.connected ? 'border-neon-green/30 bg-neon-green/10 text-neon-green' : 'border-red-500/30 bg-red-500/10 text-red-400'">
+                        <span class="w-1.5 h-1.5 rounded-full" :class="status.connected ? 'bg-neon-green' : 'bg-red-400'"></span>
+                        <span x-text="status.connected ? 'Live' : 'Down'"></span>
+                    </span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="rounded-lg border border-space-border/60 bg-space-900/70 px-2 py-2">
+                        <p class="text-[10px] text-gray-500 uppercase">Models</p>
+                        <p class="text-sm font-semibold text-white" x-text="models.length"></p>
+                    </div>
+                    <div class="rounded-lg border border-space-border/60 bg-space-900/70 px-2 py-2">
+                        <p class="text-[10px] text-gray-500 uppercase">Accounts</p>
+                        <p class="text-sm font-semibold text-neon-purple" x-text="accountPool.configuredCount || accountPool.accounts.length"></p>
+                    </div>
+                    <div class="rounded-lg border border-space-border/60 bg-space-900/70 px-2 py-2">
+                        <p class="text-[10px] text-gray-500 uppercase">Req 24h</p>
+                        <p class="text-sm font-semibold text-neon-cyan" x-text="usageStats.totalRequests || 0"></p>
+                    </div>
+                </div>
+            </div>
 
-            <div class="px-4 mt-8 mb-2 text-xs font-bold text-gray-600 uppercase tracking-widest">Advanced</div>
-            <nav class="flex flex-col gap-1">
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'history'}"
-                        @click="activeTab = 'history'; fetchRequestHistory()">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>History</span>
-                </button>
+            <div class="flex-1 overflow-y-auto pr-1 space-y-4">
+                <div>
+                    <div class="px-1 mb-2 text-[11px] font-bold text-gray-600 uppercase tracking-widest">Main</div>
+                    <nav class="space-y-1">
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'dashboard'}"
+                                @click="activeTab = 'dashboard'">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                </svg>
+                            </span>
+                            <span>Dashboard</span>
+                        </button>
 
-                <button class="nav-item flex items-center gap-3 px-6 py-3 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-                        :class="{'active': activeTab === 'playground'}"
-                        @click="activeTab = 'playground'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Playground</span>
-                </button>
-            </nav>
-            
-            <!-- Footer -->
-            <div class="mt-auto px-6 py-4 border-t border-space-border">
-                <div class="text-xs text-gray-600 font-mono">
-                    <div>User: <span class="text-gray-400" x-text="status.user || 'N/A'"></span></div>
-                    <div>Version: <span class="text-gray-400" x-text="status.version || 'N/A'"></span></div>
-                    <div>Account: <span class="text-gray-400" x-text="status.accountType || 'N/A'"></span></div>
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'models'}"
+                                @click="activeTab = 'models'">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                            </span>
+                            <span>Models</span>
+                            <span class="ml-auto px-2 py-0.5 text-xs rounded-full bg-neon-purple/20 text-neon-purple"
+                                  x-text="models.length"></span>
+                        </button>
+                    </nav>
+                </div>
+
+                <div>
+                    <div class="px-1 mb-2 text-[11px] font-bold text-gray-600 uppercase tracking-widest">System</div>
+                    <nav class="space-y-1">
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'usage'}"
+                                @click="activeTab = 'usage'; fetchAccountsQuota()">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                            </span>
+                            <span>Usage</span>
+                        </button>
+
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'accounts'}"
+                                @click="activeTab = 'accounts'">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                            </span>
+                            <span>Accounts</span>
+                            <span class="ml-auto px-2 py-0.5 text-xs rounded-full bg-neon-purple/20 text-neon-purple"
+                                  x-text="accountPool.configuredCount || accountPool.accounts.length"></span>
+                        </button>
+
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'logs'}"
+                                @click="activeTab = 'logs'">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </span>
+                            <span>Logs</span>
+                            <span x-show="logs.filter((log) => log.level === 'error').length > 0"
+                                  class="ml-auto px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-300"
+                                  x-text="logs.filter((log) => log.level === 'error').length"></span>
+                        </button>
+
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'settings'}"
+                                @click="activeTab = 'settings'">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </span>
+                            <span>Settings</span>
+                        </button>
+                    </nav>
+                </div>
+
+                <div>
+                    <div class="px-1 mb-2 text-[11px] font-bold text-gray-600 uppercase tracking-widest">Advanced</div>
+                    <nav class="space-y-1">
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'history'}"
+                                @click="activeTab = 'history'; fetchRequestHistory()">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <span>History</span>
+                        </button>
+
+                        <button class="nav-item group w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                :class="{'active': activeTab === 'playground'}"
+                                @click="activeTab = 'playground'">
+                            <span class="nav-icon w-8 h-8 rounded-lg border border-space-border/60 bg-space-950/70 flex items-center justify-center text-gray-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <span>Playground</span>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-3 text-[11px] font-mono space-y-1.5">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-gray-500 uppercase tracking-wider">User</span>
+                    <span class="text-gray-300 max-w-[150px] truncate" x-text="status.user || 'N/A'"></span>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-gray-500 uppercase tracking-wider">Version</span>
+                    <span class="text-gray-300" x-text="status.version || 'N/A'"></span>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-gray-500 uppercase tracking-wider">Account</span>
+                    <span class="text-gray-300 capitalize" x-text="status.accountType || 'N/A'"></span>
                 </div>
             </div>
         </aside>
         
         <!-- Main Content -->
-        <main class="flex-1 overflow-auto p-6">
+        <main class="flex-1 overflow-auto p-4 md:p-6">
             
             <!-- Dashboard View -->
             <div x-show="activeTab === 'dashboard'" x-cloak class="space-y-6">
