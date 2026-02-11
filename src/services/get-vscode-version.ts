@@ -14,10 +14,6 @@ export async function getVSCodeVersion() {
       },
     )
 
-    if (!response.ok) {
-      return FALLBACK
-    }
-
     const pkgbuild = await response.text()
     const pkgverRegex = /pkgver=([0-9.]+)/
     const match = pkgbuild.match(pkgverRegex)
@@ -36,3 +32,5 @@ export async function getVSCodeVersion() {
     clearTimeout(timeout)
   }
 }
+
+await getVSCodeVersion()
