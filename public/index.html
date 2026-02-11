@@ -1698,217 +1698,225 @@
             </div>
             
             <!-- Settings View -->
-            <div x-show="activeTab === 'settings'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold text-white">Settings</h1>
-                    <div class="flex items-center gap-2">
-                        <button @click="exportSettings()"
-                                class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                                title="Export settings">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                        </button>
-                        <label class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-                               title="Import settings">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                            </svg>
-                            <input type="file" accept=".json" @change="importSettings($event)" class="hidden">
-                        </label>
-                        <button @click="fetchConfig()"
-                                class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                                title="Reload settings">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                        </button>
-                        <button @click="resetSettings()"
-                                class="px-3 py-1.5 text-sm bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors">
-                            Reset to Defaults
-                        </button>
-                    </div>
-                </div>
+            <div x-show="activeTab === 'settings'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-20 -right-16 h-56 w-56 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-20 -left-12 h-56 w-56 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="relative space-y-6">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Configuration Center</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">Settings Control Room</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Tune runtime behavior, manage security posture, and control fallback behavior for model routing.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button @click="fetchConfig()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 transition-colors">
+                                    Reload
+                                </button>
+                                <button @click="exportSettings()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
+                                    Export
+                                </button>
+                                <label class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-purple/20 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/30 transition-colors cursor-pointer">
+                                    Import
+                                    <input type="file" accept=".json" @change="importSettings($event)" class="hidden">
+                                </label>
+                                <button @click="resetSettings()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-colors">
+                                    Reset Defaults
+                                </button>
+                            </div>
+                        </div>
 
-                <!-- Server Info -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6 mb-6">
-                    <h2 class="text-lg font-semibold text-white mb-4">Server Information</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="bg-space-950 rounded-lg p-4">
-                            <div class="text-xs text-gray-500 mb-1">Version</div>
-                            <div class="text-white font-mono" x-text="serverInfo.version || 'N/A'"></div>
-                        </div>
-                        <div class="bg-space-950 rounded-lg p-4">
-                            <div class="text-xs text-gray-500 mb-1">Uptime</div>
-                            <div class="text-white font-mono" x-text="formatUptime(serverInfo.uptime)"></div>
-                        </div>
-                        <div class="bg-space-950 rounded-lg p-4">
-                            <div class="text-xs text-gray-500 mb-1">User</div>
-                            <div class="text-white font-mono" x-text="serverInfo.user || 'N/A'"></div>
-                        </div>
-                        <div class="bg-space-950 rounded-lg p-4">
-                            <div class="text-xs text-gray-500 mb-1">Port</div>
-                            <div class="text-white font-mono" x-text="settings.port || 4141"></div>
+                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Version</p>
+                                <p class="text-sm font-bold text-white font-mono truncate" x-text="serverInfo.version || 'N/A'"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Uptime</p>
+                                <p class="text-sm font-bold text-neon-cyan" x-text="formatUptime(serverInfo.uptime)"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">User</p>
+                                <p class="text-sm font-bold text-white truncate" x-text="serverInfo.user || 'N/A'"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Port</p>
+                                <p class="text-sm font-bold text-white" x-text="settings.port || 4141"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Config State</p>
+                                <p class="text-sm font-bold" :class="hasUnsavedChanges ? 'text-yellow-300' : 'text-emerald-300'" x-text="hasUnsavedChanges ? 'Unsaved Changes' : 'In Sync'"></p>
+                            </div>
                         </div>
                     </div>
-                    <div class="mt-4 pt-4 border-t border-space-border">
-                        <div class="flex items-center justify-between">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm flex-1">
-                                <div>
-                                    <span class="text-gray-500">Config Path:</span>
-                                    <span class="text-gray-300 ml-2 font-mono text-xs break-all" x-text="serverInfo.configPath || 'N/A'"></span>
-                                </div>
-                                <div>
-                                    <span class="text-gray-500">Claude Config:</span>
-                                    <span class="text-gray-300 ml-2 font-mono text-xs break-all" x-text="serverInfo.claudeConfigPath || 'N/A'"></span>
-                                </div>
+                </section>
+
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <section class="xl:col-span-2 bg-space-900 border border-space-border rounded-2xl p-5">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                            <div>
+                                <h2 class="text-lg font-semibold text-white">Server Information</h2>
+                                <p class="text-xs text-gray-500 mt-1">Runtime identity, paths, and operational control.</p>
                             </div>
                             <button @click="restartServer()"
-                                    class="ml-4 px-4 py-2 bg-yellow-500/10 text-yellow-400 rounded-lg hover:bg-yellow-500/20 transition-colors flex items-center gap-2">
+                                    class="px-4 py-2 text-sm font-medium rounded-lg bg-yellow-500/15 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/25 transition-colors flex items-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                                 Restart Server
                             </button>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Claude CLI Settings -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6 mb-6">
-                    <h2 class="text-lg font-semibold text-white mb-4">Claude CLI Configuration</h2>
-                    <p class="text-gray-500 text-sm mb-4">Configure settings for Claude Code CLI integration.</p>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-400 mb-2">Default Model (Sonnet)</label>
-                            <select x-model="settings.defaultModel"
-                                    class="w-full bg-space-950 border border-space-border rounded-lg px-4 py-2 text-white focus:border-neon-purple focus:outline-none">
-                                <template x-for="(model, index) in models" :key="index">
-                                    <option :value="model.id" x-text="model.id"></option>
-                                </template>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-400 mb-2">Small/Fast Model (Haiku)</label>
-                            <select x-model="settings.defaultSmallModel"
-                                    class="w-full bg-space-950 border border-space-border rounded-lg px-4 py-2 text-white focus:border-neon-purple focus:outline-none">
-                                <template x-for="(model, index) in models" :key="index">
-                                    <option :value="model.id" x-text="model.id"></option>
-                                </template>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <button @click="previewClaudeConfig()"
-                                class="px-4 py-2 bg-space-800 text-gray-300 rounded-lg hover:bg-space-700 transition-colors">
-                            Preview Config
-                        </button>
-                        <button @click="applyClaudeConfig()"
-                                class="px-4 py-2 bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors">
-                            Apply to Claude CLI
-                        </button>
-                    </div>
-
-                    <!-- Claude Config Preview Modal -->
-                    <div x-show="showClaudePreview" x-cloak
-                         class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
-                         @click.self="showClaudePreview = false">
-                        <div class="bg-space-900 border border-space-border rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold text-white">Claude CLI Config Preview</h3>
-                                <button @click="showClaudePreview = false"
-                                        class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                <p class="text-xs text-gray-500 mb-1">Config Path</p>
+                                <p class="text-xs font-mono text-gray-300 break-all" x-text="serverInfo.configPath || 'N/A'"></p>
                             </div>
-                            <p class="text-gray-500 text-sm mb-4">This configuration will be written to <code class="text-neon-cyan">~/.claude/settings.json</code></p>
-                            <pre class="bg-space-950 rounded-lg p-4 text-sm text-gray-300 font-mono overflow-x-auto whitespace-pre-wrap" x-text="JSON.stringify(claudePreviewConfig, null, 2)"></pre>
-                            <div class="flex justify-end gap-2 mt-4">
-                                <button @click="showClaudePreview = false"
-                                        class="px-4 py-2 bg-space-800 text-gray-300 rounded-lg hover:bg-space-700 transition-colors">
-                                    Cancel
-                                </button>
-                                <button @click="applyClaudeConfig(); showClaudePreview = false"
-                                        class="px-4 py-2 bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors">
-                                    Apply Config
-                                </button>
+                            <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                <p class="text-xs text-gray-500 mb-1">Claude Config Path</p>
+                                <p class="text-xs font-mono text-gray-300 break-all" x-text="serverInfo.claudeConfigPath || 'N/A'"></p>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </section>
 
-                <!-- Server Settings -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6 mb-6"
-                     x-effect="checkUnsavedChanges()">
-                    <h2 class="text-lg font-semibold text-white mb-4">Server Configuration</h2>
+                    <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                        <h2 class="text-lg font-semibold text-white">Claude CLI</h2>
+                        <p class="text-xs text-gray-500 mt-1 mb-4">Model defaults and one-click config deployment.</p>
 
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between py-3 border-b border-space-border">
+                        <div class="space-y-3">
                             <div>
-                                <div class="font-medium text-white">Debug Mode</div>
-                                <div class="text-sm text-gray-500">Enable verbose logging</div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Default Model (Sonnet)</label>
+                                <select x-model="settings.defaultModel"
+                                        class="w-full bg-space-950 border border-space-border rounded-lg px-3 py-2.5 text-white text-sm focus:border-neon-purple focus:outline-none">
+                                    <template x-for="(model, index) in models" :key="index">
+                                        <option :value="model.id" x-text="model.id"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Small/Fast Model (Haiku)</label>
+                                <select x-model="settings.defaultSmallModel"
+                                        class="w-full bg-space-950 border border-space-border rounded-lg px-3 py-2.5 text-white text-sm focus:border-neon-purple focus:outline-none">
+                                    <template x-for="(model, index) in models" :key="index">
+                                        <option :value="model.id" x-text="model.id"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="flex gap-2 pt-1">
+                                <button @click="previewClaudeConfig()"
+                                        class="flex-1 px-3 py-2 text-sm bg-space-950 text-gray-300 border border-space-border rounded-lg hover:border-gray-500 transition-colors">
+                                    Preview
+                                </button>
+                                <button @click="applyClaudeConfig()"
+                                        class="flex-1 px-3 py-2 text-sm bg-neon-purple/20 text-neon-purple border border-neon-purple/30 rounded-lg hover:bg-neon-purple/30 transition-colors">
+                                    Apply
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Claude Config Preview Modal -->
+                        <div x-show="showClaudePreview" x-cloak
+                             class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+                             @click.self="showClaudePreview = false">
+                            <div class="bg-space-900 border border-space-border rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-semibold text-white">Claude CLI Config Preview</h3>
+                                    <button @click="showClaudePreview = false"
+                                            class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <p class="text-gray-500 text-sm mb-4">This configuration will be written to <code class="text-neon-cyan">~/.claude/settings.json</code></p>
+                                <pre class="bg-space-950 rounded-lg p-4 text-sm text-gray-300 font-mono overflow-x-auto whitespace-pre-wrap" x-text="JSON.stringify(claudePreviewConfig, null, 2)"></pre>
+                                <div class="flex justify-end gap-2 mt-4">
+                                    <button @click="showClaudePreview = false"
+                                            class="px-4 py-2 bg-space-800 text-gray-300 rounded-lg hover:bg-space-700 transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button @click="applyClaudeConfig(); showClaudePreview = false"
+                                            class="px-4 py-2 bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors">
+                                        Apply Config
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="bg-space-900 border border-space-border rounded-2xl p-5" x-effect="checkUnsavedChanges()">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Server Configuration</h2>
+                            <p class="text-xs text-gray-500 mt-1">Core runtime toggles, alerts, rate limits, and WebUI access control.</p>
+                        </div>
+                        <span x-show="hasUnsavedChanges"
+                              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border bg-yellow-500/10 text-yellow-300 border-yellow-500/30">
+                            <span class="w-1.5 h-1.5 rounded-full bg-yellow-300 animate-pulse"></span>
+                            Unsaved changes
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+                        <label class="rounded-xl border border-space-border/60 bg-space-950/70 p-4 flex items-start justify-between gap-3 cursor-pointer">
+                            <div>
+                                <p class="text-sm font-semibold text-white">Debug Mode</p>
+                                <p class="text-xs text-gray-500 mt-1">Enable verbose logging.</p>
                             </div>
                             <input type="checkbox" x-model="settings.debug"
-                                   class="w-5 h-5 rounded bg-space-950 border-space-border text-neon-purple focus:ring-neon-purple">
-                        </div>
-
-                        <div class="flex items-center justify-between py-3 border-b border-space-border">
+                                   class="w-5 h-5 rounded bg-space-900 border-space-border text-neon-purple focus:ring-neon-purple">
+                        </label>
+                        <label class="rounded-xl border border-space-border/60 bg-space-950/70 p-4 flex items-start justify-between gap-3 cursor-pointer">
                             <div>
-                                <div class="font-medium text-white">Track Usage</div>
-                                <div class="text-sm text-gray-500">Record API usage statistics</div>
+                                <p class="text-sm font-semibold text-white">Track Usage</p>
+                                <p class="text-xs text-gray-500 mt-1">Record API usage statistics.</p>
                             </div>
                             <input type="checkbox" x-model="settings.trackUsage"
-                                   class="w-5 h-5 rounded bg-space-950 border-space-border text-neon-purple focus:ring-neon-purple">
-                        </div>
-
-                        <div class="flex items-center justify-between py-3 border-b border-space-border">
+                                   class="w-5 h-5 rounded bg-space-900 border-space-border text-neon-purple focus:ring-neon-purple">
+                        </label>
+                        <label class="rounded-xl border border-space-border/60 bg-space-950/70 p-4 flex items-start justify-between gap-3 cursor-pointer">
                             <div>
-                                <div class="font-medium text-white">Model Fallback</div>
-                                <div class="text-sm text-gray-500">Auto-fallback when model unavailable</div>
+                                <p class="text-sm font-semibold text-white">Model Fallback</p>
+                                <p class="text-xs text-gray-500 mt-1">Auto-fallback when model is unavailable.</p>
                             </div>
                             <input type="checkbox" x-model="settings.fallbackEnabled"
-                                   class="w-5 h-5 rounded bg-space-950 border-space-border text-neon-purple focus:ring-neon-purple">
-                        </div>
+                                   class="w-5 h-5 rounded bg-space-900 border-space-border text-neon-purple focus:ring-neon-purple">
+                        </label>
+                    </div>
 
-                        <!-- Notifications -->
-                        <div class="py-3 border-b border-space-border">
-                            <div class="mb-3">
-                                <div class="font-medium text-white">Notifications</div>
-                                <div class="text-sm text-gray-500">Alert settings for important events</div>
-                            </div>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                            <h3 class="text-sm font-semibold text-white mb-1">Notifications</h3>
+                            <p class="text-xs text-gray-500 mb-3">Alert settings for important events.</p>
                             <div class="space-y-2">
                                 <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                                     <input type="checkbox" x-model="notificationSettings.rateLimitAlerts"
-                                           class="w-4 h-4 rounded bg-space-950 border-space-border text-neon-purple">
+                                           class="w-4 h-4 rounded bg-space-900 border-space-border text-neon-purple">
                                     Rate limit alerts
                                 </label>
                                 <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                                     <input type="checkbox" x-model="notificationSettings.accountErrorAlerts"
-                                           class="w-4 h-4 rounded bg-space-950 border-space-border text-neon-purple">
+                                           class="w-4 h-4 rounded bg-space-900 border-space-border text-neon-purple">
                                     Account error alerts
                                 </label>
                                 <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                                     <input type="checkbox" x-model="notificationSettings.soundEnabled"
-                                           class="w-4 h-4 rounded bg-space-950 border-space-border text-neon-purple">
+                                           class="w-4 h-4 rounded bg-space-900 border-space-border text-neon-purple">
                                     Sound notifications
                                 </label>
                             </div>
                         </div>
 
-                        <!-- Rate Limiting -->
-                        <div class="py-3 border-b border-space-border">
-                            <div class="flex items-center justify-between mb-3">
-                                <div>
-                                    <div class="font-medium text-white">Rate Limiting</div>
-                                    <div class="text-sm text-gray-500">Limit requests per second (leave empty or 0 to disable)</div>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                            <h3 class="text-sm font-semibold text-white mb-1">Rate Limiting</h3>
+                            <p class="text-xs text-gray-500 mb-3">Leave empty or 0 to disable request interval control.</p>
+                            <div class="space-y-3">
                                 <div>
                                     <label class="block text-xs text-gray-500 mb-1">Seconds between requests</label>
                                     <input type="number"
@@ -1918,90 +1926,87 @@
                                            min="0"
                                            max="3600"
                                            step="1"
-                                           class="w-full px-4 py-2 bg-space-950 border rounded-lg text-white focus:border-neon-purple focus:outline-none"
+                                           class="w-full px-4 py-2.5 bg-space-900 border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none"
                                            :class="rateLimitError ? 'border-red-500' : 'border-space-border'">
                                     <p x-show="rateLimitError" class="text-xs text-red-400 mt-1" x-text="rateLimitError"></p>
                                 </div>
-                                <div class="flex items-end">
-                                    <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                                        <input type="checkbox" x-model="settings.rateLimitWait"
-                                               class="w-4 h-4 rounded bg-space-950 border-space-border text-neon-purple">
-                                        Wait instead of error when rate limited
-                                    </label>
-                                </div>
+                                <label class="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                                    <input type="checkbox" x-model="settings.rateLimitWait"
+                                           class="w-4 h-4 rounded bg-space-900 border-space-border text-neon-purple">
+                                    Wait instead of error when rate limited
+                                </label>
                             </div>
-                        </div>
-
-                        <!-- WebUI Password -->
-                        <div class="py-3 border-b border-space-border">
-                            <div class="mb-3">
-                                <div class="font-medium text-white">WebUI Password</div>
-                                <div class="text-sm text-gray-500">
-                                    <template x-if="settings.webuiPasswordSet">
-                                        <span class="text-neon-green">Password is set</span>
-                                    </template>
-                                    <template x-if="!settings.webuiPasswordSet">
-                                        <span>No password configured (open access)</span>
-                                    </template>
-                                </div>
-                            </div>
-                            <div class="flex gap-2">
-                                <div class="relative flex-1">
-                                    <input :type="showPassword ? 'text' : 'password'"
-                                           x-model="newWebuiPassword"
-                                           placeholder="Enter new password (leave empty to remove)"
-                                           class="w-full px-4 py-2 pr-10 bg-space-950 border border-space-border rounded-lg text-white focus:border-neon-purple focus:outline-none">
-                                    <button type="button" @click="showPassword = !showPassword"
-                                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
-                                        <svg x-show="!showPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                        <svg x-show="showPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                        </svg>
-                                    </button>
-                                </div>
-                                <button @click="updateWebuiPassword()"
-                                        class="px-4 py-2 bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors">
-                                    Update
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-4">
-                            <button @click="saveSettings()"
-                                    :disabled="rateLimitError"
-                                    class="px-4 py-2 bg-neon-green/20 text-neon-green rounded-lg hover:bg-neon-green/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                                <span>Save Settings</span>
-                                <span x-show="hasUnsavedChanges" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
-                            </button>
-                            <span x-show="hasUnsavedChanges" class="text-yellow-400 text-sm flex items-center gap-1">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                Unsaved changes
-                            </span>
                         </div>
                     </div>
-                </div>
 
-                <!-- Model Mapping -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-6" x-show="settings.fallbackEnabled">
-                    <h2 class="text-lg font-semibold text-white mb-4">Model Mapping</h2>
-                    <p class="text-gray-500 text-sm mb-4">Configure custom model fallback mappings. When a requested model is not available, it will be mapped to the specified target model.</p>
+                    <div class="mt-4 rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                        <h3 class="text-sm font-semibold text-white mb-1">WebUI Password</h3>
+                        <p class="text-xs text-gray-500 mb-3">
+                            <template x-if="settings.webuiPasswordSet">
+                                <span class="text-emerald-300">Password is set</span>
+                            </template>
+                            <template x-if="!settings.webuiPasswordSet">
+                                <span>No password configured (open access)</span>
+                            </template>
+                        </p>
+                        <div class="flex flex-col md:flex-row gap-2">
+                            <div class="relative flex-1">
+                                <input :type="showPassword ? 'text' : 'password'"
+                                       x-model="newWebuiPassword"
+                                       placeholder="Enter new password (leave empty to remove)"
+                                       class="w-full px-4 py-2.5 pr-10 bg-space-900 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                                <button type="button" @click="showPassword = !showPassword"
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
+                                    <svg x-show="!showPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    <svg x-show="showPassword" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <button @click="updateWebuiPassword()"
+                                    class="px-4 py-2.5 bg-neon-purple/20 text-neon-purple border border-neon-purple/30 rounded-lg hover:bg-neon-purple/30 transition-colors text-sm font-medium">
+                                Update Password
+                            </button>
+                        </div>
+                    </div>
 
-                    <!-- Existing Mappings -->
+                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                        <button @click="saveSettings()"
+                                :disabled="rateLimitError"
+                                class="px-5 py-2.5 bg-neon-green/20 text-neon-green border border-neon-green/30 rounded-lg hover:bg-neon-green/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium">
+                            <span>Save Settings</span>
+                            <span x-show="hasUnsavedChanges" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                        </button>
+                        <span x-show="hasUnsavedChanges" class="text-yellow-300 text-sm flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Unsaved changes
+                        </span>
+                    </div>
+                </section>
+
+                <section class="bg-space-900 border border-space-border rounded-2xl p-5" x-show="settings.fallbackEnabled">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Model Mapping</h2>
+                            <p class="text-xs text-gray-500 mt-1">Define custom fallback mappings when requested models are unavailable.</p>
+                        </div>
+                    </div>
+
                     <div class="space-y-2 mb-4" x-show="Object.keys(settings.modelMapping || {}).length > 0">
                         <template x-for="(target, source) in settings.modelMapping" :key="source">
-                            <div class="flex items-center gap-3 p-3 bg-space-950 rounded-lg">
-                                <span class="text-white font-mono text-sm" x-text="source"></span>
-                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="flex items-center gap-3 p-3 rounded-lg border border-space-border/60 bg-space-950/70">
+                                <span class="text-white font-mono text-sm break-all" x-text="source"></span>
+                                <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                 </svg>
-                                <span class="text-neon-cyan font-mono text-sm" x-text="target"></span>
+                                <span class="text-neon-cyan font-mono text-sm break-all" x-text="target"></span>
                                 <button @click="removeModelMapping(source)"
-                                        class="ml-auto p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors">
+                                        class="ml-auto p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -2010,13 +2015,13 @@
                         </template>
                     </div>
 
-                    <div x-show="Object.keys(settings.modelMapping || {}).length === 0" class="text-gray-500 text-sm mb-4">
-                        No custom mappings configured. Add mappings below.
+                    <div x-show="Object.keys(settings.modelMapping || {}).length === 0"
+                         class="rounded-xl border border-dashed border-space-border bg-space-950/60 p-5 text-center text-gray-500 text-sm mb-4">
+                        No custom mappings configured. Add one below.
                     </div>
 
-                    <!-- Add New Mapping -->
-                    <div class="flex flex-wrap gap-2 items-end">
-                        <div class="flex-1 min-w-[150px] relative">
+                    <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                        <div class="relative">
                             <label class="block text-xs text-gray-500 mb-1">Source Model</label>
                             <input type="text"
                                    x-model="newMappingFrom"
@@ -2025,8 +2030,7 @@
                                    @blur="setTimeout(() => showModelSuggestions = false, 200)"
                                    placeholder="e.g., claude-3-opus"
                                    autocomplete="off"
-                                   class="w-full px-3 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
-                            <!-- Autocomplete dropdown -->
+                                   class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
                             <div x-show="showModelSuggestions && modelSuggestions.length > 0"
                                  class="absolute z-10 w-full mt-1 bg-space-900 border border-space-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                 <template x-for="suggestion in modelSuggestions" :key="suggestion">
@@ -2037,10 +2041,10 @@
                                 </template>
                             </div>
                         </div>
-                        <div class="flex-1 min-w-[150px]">
+                        <div>
                             <label class="block text-xs text-gray-500 mb-1">Target Model</label>
                             <select x-model="newMappingTo"
-                                    class="w-full px-3 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                                    class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
                                 <option value="">Select model...</option>
                                 <template x-for="(model, index) in models" :key="index">
                                     <option :value="model.id" x-text="model.id"></option>
@@ -2048,13 +2052,13 @@
                             </select>
                         </div>
                         <button @click="addModelMapping()"
-                                class="px-4 py-2 bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors text-sm">
+                                class="px-4 py-2.5 bg-neon-purple/20 text-neon-purple border border-neon-purple/30 rounded-lg hover:bg-neon-purple/30 transition-colors text-sm font-medium">
                             Add Mapping
                         </button>
                     </div>
 
-                    <p class="text-xs text-gray-600 mt-3">Note: Remember to click "Save Settings" to apply changes.</p>
-                </div>
+                    <p class="text-xs text-gray-600 mt-3">Remember to click "Save Settings" after updating mappings.</p>
+                </section>
             </div>
 
             <!-- Request History View -->
