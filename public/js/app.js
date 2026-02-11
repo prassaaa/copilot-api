@@ -142,6 +142,7 @@ document.addEventListener("alpine:init", () => {
       configuredCount: 0,
     },
     newAccountLabel: "",
+    accountPoolQuotaFilter: "all",
 
     // OAuth flow state
     oauthFlow: {
@@ -1788,8 +1789,7 @@ document.addEventListener("alpine:init", () => {
           continue
         }
 
-        const effectiveQuota = this.getEffectiveAccountQuotaPercent(account)
-        if (account.pausedReason === "quota" || (effectiveQuota !== null && effectiveQuota <= 20)) {
+        if (this.isLowQuotaAccount(account)) {
           lowQuota++
         }
       }
@@ -1801,6 +1801,17 @@ document.addEventListener("alpine:init", () => {
         lowQuota,
         noQuota,
       }
+    },
+
+    get filteredPoolAccounts() {
+      const accounts = this.accountPool.accounts || []
+      if (this.accountPoolQuotaFilter === "low") {
+        return accounts.filter((account) => this.isLowQuotaAccount(account))
+      }
+      if (this.accountPoolQuotaFilter === "not-low") {
+        return accounts.filter((account) => !this.isLowQuotaAccount(account))
+      }
+      return accounts
     },
 
     get usageQuotaResetDate() {
@@ -1834,6 +1845,11 @@ document.addEventListener("alpine:init", () => {
 
       if (percents.length === 0) return null
       return Math.round(Math.min(...percents))
+    },
+
+    isLowQuotaAccount(account) {
+      const effectiveQuota = this.getEffectiveAccountQuotaPercent(account)
+      return account?.pausedReason === "quota" || (effectiveQuota !== null && effectiveQuota <= 20)
     },
 
     getUsageStatusLabel(account) {

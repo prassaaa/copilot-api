@@ -1243,18 +1243,37 @@
                         <div>
                             <h2 class="text-lg font-semibold text-white">
                                 Accounts
-                                <span class="text-sm font-normal text-gray-500">(<span x-text="accountPool.accounts.length"></span> total)</span>
+                                <span class="text-sm font-normal text-gray-500">(<span x-text="filteredPoolAccounts.length"></span> shown / <span x-text="accountPool.accounts.length"></span> total)</span>
                             </h2>
                             <p class="text-xs text-gray-500 mt-1">Operational cards with quota visibility and account actions.</p>
                         </div>
-                        <div class="text-xs text-gray-500">
-                            Active strategy:
-                            <span class="text-gray-300 capitalize" x-text="(accountPool.strategy || 'sticky').replace('-', ' ')"></span>
+                        <div class="flex flex-col md:items-end gap-2">
+                            <div class="text-xs text-gray-500">
+                                Active strategy:
+                                <span class="text-gray-300 capitalize" x-text="(accountPool.strategy || 'sticky').replace('-', ' ')"></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button @click="accountPoolQuotaFilter = 'all'"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
+                                        :class="accountPoolQuotaFilter === 'all' ? 'bg-neon-purple/20 text-neon-purple border-neon-purple/40' : 'bg-space-950 text-gray-400 border-space-border hover:text-white'">
+                                    All
+                                </button>
+                                <button @click="accountPoolQuotaFilter = 'low'"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
+                                        :class="accountPoolQuotaFilter === 'low' ? 'bg-orange-500/20 text-orange-300 border-orange-500/40' : 'bg-space-950 text-gray-400 border-space-border hover:text-white'">
+                                    Low Quota
+                                </button>
+                                <button @click="accountPoolQuotaFilter = 'not-low'"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
+                                        :class="accountPoolQuotaFilter === 'not-low' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-space-950 text-gray-400 border-space-border hover:text-white'">
+                                    Not Low Quota
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4" x-show="accountPool.accounts.length > 0">
-                        <template x-for="account in accountPool.accounts" :key="account.id">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4" x-show="filteredPoolAccounts.length > 0">
+                        <template x-for="account in filteredPoolAccounts" :key="account.id">
                             <article class="relative overflow-hidden rounded-2xl border p-5 transition-all duration-200"
                                      :class="isCurrentAccount(account.id) ? 'bg-space-900 border-neon-cyan/40' : 'bg-space-900 border-space-border hover:border-space-border/70'">
                                 <div class="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full blur-3xl"
@@ -1442,6 +1461,14 @@
                         </svg>
                         <p class="text-gray-400 mb-1">No accounts configured</p>
                         <p class="text-sm text-gray-600">Add a GitHub account above to enable account pool rotation.</p>
+                    </div>
+
+                    <div x-show="accountPool.accounts.length > 0 && filteredPoolAccounts.length === 0" class="text-center py-12 text-gray-500">
+                        <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V19l-4 2v-7.172a1 1 0 00-.293-.707L3.293 6.707A1 1 0 013 6V4z"/>
+                        </svg>
+                        <p class="text-gray-400 mb-1">No accounts match this filter</p>
+                        <p class="text-sm text-gray-600">Try switching to All, or refresh quotas to update account status.</p>
                     </div>
                 </section>
             </div>
