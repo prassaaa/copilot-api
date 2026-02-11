@@ -1769,6 +1769,102 @@ document.addEventListener("alpine:init", () => {
       return { text: `${remaining} / ${entitlement}`, percent }
     },
 
+    get usageAccountSummary() {
+      const accounts = this.accountPool.accounts || []
+      let active = 0
+      let paused = 0
+      let lowQuota = 0
+      let noQuota = 0
+
+      for (const account of accounts) {
+        if (account.active && !account.paused) {
+          active++
+        }
+        if (account.paused) {
+          paused++
+        }
+        if (!account.quota) {
+          noQuota++
+          continue
+        }
+
+        const effectiveQuota = this.getEffectiveAccountQuotaPercent(account)
+        if (account.pausedReason === "quota" || (effectiveQuota !== null && effectiveQuota <= 20)) {
+          lowQuota++
+        }
+      }
+
+      return {
+        total: this.accountPool.configuredCount || accounts.length,
+        active,
+        paused,
+        lowQuota,
+        noQuota,
+      }
+    },
+
+    get usageQuotaResetDate() {
+      const accounts = this.accountPool.accounts || []
+      const resetDate = accounts.map((account) => account?.quota?.resetDate).find(Boolean)
+      if (resetDate) {
+        return new Date(resetDate).toLocaleDateString()
+      }
+      if (this.copilotUsage.quota_reset_date) {
+        return new Date(this.copilotUsage.quota_reset_date).toLocaleDateString()
+      }
+      return "N/A"
+    },
+
+    getEffectiveAccountQuotaPercent(account) {
+      if (!account?.quota) return null
+
+      const snapshots = [
+        account.quota.chat,
+        account.quota.completions,
+        account.quota.premiumInteractions,
+      ]
+
+      const percents = snapshots
+        .map((snapshot) => {
+          if (!snapshot) return null
+          if (snapshot.unlimited) return 100
+          return typeof snapshot.percentRemaining === "number" ? snapshot.percentRemaining : null
+        })
+        .filter((percent) => percent !== null)
+
+      if (percents.length === 0) return null
+      return Math.round(Math.min(...percents))
+    },
+
+    getUsageStatusLabel(account) {
+      if (account.paused) {
+        return account.pausedReason === "quota" ? "Low Quota" : "Paused"
+      }
+      if (!account.active) {
+        return "Inactive"
+      }
+      if (account.rateLimited) {
+        return "Rate Limited"
+      }
+      return "Active"
+    },
+
+    getUsageStatusClass(account) {
+      if (account.paused && account.pausedReason === "quota") {
+        return "bg-orange-500/15 text-orange-300 border border-orange-500/30"
+      }
+      if (account.paused) {
+        return "bg-gray-500/15 text-gray-300 border border-gray-500/30"
+      }
+      if (!account.active) {
+        return "bg-red-500/15 text-red-300 border border-red-500/30"
+      }
+      if (account.rateLimited) {
+        return "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30"
+      }
+      return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+    },
+
     // Get quota color class based on percentage
     getQuotaColor(snapshot) {
       if (!snapshot || snapshot.unlimited) return "text-emerald-400"

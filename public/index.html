@@ -526,178 +526,314 @@
             </div>
 
             <!-- Usage View -->
-            <div x-show="activeTab === 'usage'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold text-white">Usage & Quotas</h1>
-                    <button @click="fetchAccountsQuota()"
-                            class="px-4 py-2 text-sm bg-neon-cyan/20 text-neon-cyan rounded-lg hover:bg-neon-cyan/30 transition-colors">
-                        Refresh Quotas
-                    </button>
-                </div>
+            <div x-show="activeTab === 'usage'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-16 -left-10 h-56 w-56 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="relative flex flex-col gap-6">
+                        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Usage Operations</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">Usage & Quotas Command Center</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Pantau kesehatan semua akun Copilot, cek risiko quota rendah, dan identifikasi account yang perlu diprioritaskan.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button @click="fetchAccountsQuota()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
+                                    Refresh Quotas
+                                </button>
+                                <button @click="fetchAccounts()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 transition-colors">
+                                    Sync Accounts
+                                </button>
+                            </div>
+                        </div>
 
-                <!-- Summary Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Total Accounts</div>
-                        <div class="text-3xl font-bold text-white" x-text="accountPool.configuredCount || accountPool.accounts.length"></div>
+                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Total Accounts</p>
+                                <p class="text-2xl font-bold text-white" x-text="usageAccountSummary.total"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Healthy</p>
+                                <p class="text-2xl font-bold text-emerald-400" x-text="usageAccountSummary.active"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Low Quota Risk</p>
+                                <p class="text-2xl font-bold text-orange-300" x-text="usageAccountSummary.lowQuota"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Paused</p>
+                                <p class="text-2xl font-bold text-yellow-300" x-text="usageAccountSummary.paused"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Reset Window</p>
+                                <p class="text-lg font-bold text-neon-cyan" x-text="usageQuotaResetDate"></p>
+                            </div>
+                        </div>
                     </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Active Accounts</div>
-                        <div class="text-3xl font-bold text-neon-green" x-text="accountPool.accounts.filter(a => a.active && !a.paused).length"></div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Quota Reset Date</div>
-                        <div class="text-xl font-bold text-neon-cyan" x-text="accountPool.accounts[0]?.quota?.resetDate ? new Date(accountPool.accounts[0].quota.resetDate).toLocaleDateString() : 'N/A'"></div>
-                    </div>
-                </div>
+                </section>
 
-                <!-- Usage Summary -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Total Requests (24h)</div>
-                        <div class="text-3xl font-bold text-white" x-text="usageStats.totalRequests || 0"></div>
-                        <div class="text-xs text-gray-500 mt-2">
-                            Avg <span class="text-gray-300" x-text="avgRequestsPerMinute"></span>/min
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <section class="xl:col-span-2 bg-space-900 border border-space-border rounded-2xl p-5">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-semibold text-white">Operational Snapshot</h2>
+                            <span class="text-xs text-gray-500">Last 24h</span>
                         </div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Top Model (24h)</div>
-                        <div class="text-lg font-bold text-neon-purple truncate" x-text="topModelUsage.model"></div>
-                        <div class="text-xs text-gray-500 mt-2">
-                            <span class="text-gray-300" x-text="topModelUsage.count"></span> reqs
-                            <span class="mx-1">•</span>
-                            <span class="text-gray-300" x-text="topModelUsage.percent + '%'"></span>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                            <div class="rounded-xl bg-space-950/70 border border-space-border/60 p-3">
+                                <p class="text-xs text-gray-500 mb-1">Requests</p>
+                                <p class="text-xl font-bold text-white" x-text="usageStats.totalRequests || 0"></p>
+                                <p class="text-[11px] text-gray-500 mt-1"><span class="text-gray-300" x-text="avgRequestsPerMinute"></span>/min</p>
+                            </div>
+                            <div class="rounded-xl bg-space-950/70 border border-space-border/60 p-3">
+                                <p class="text-xs text-gray-500 mb-1">Top Model</p>
+                                <p class="text-sm font-bold text-neon-purple truncate" x-text="topModelUsage.model"></p>
+                                <p class="text-[11px] text-gray-500 mt-1"><span x-text="topModelUsage.count"></span> req (<span x-text="topModelUsage.percent"></span>%)</p>
+                            </div>
+                            <div class="rounded-xl bg-space-950/70 border border-space-border/60 p-3">
+                                <p class="text-xs text-gray-500 mb-1">Premium Pool</p>
+                                <p class="text-sm font-bold text-neon-cyan" x-text="premiumQuotaSummary.text"></p>
+                                <p class="text-[11px] text-gray-500 mt-1" x-show="premiumQuotaSummary.percent !== null">
+                                    <span x-text="premiumQuotaSummary.percent"></span>% remaining
+                                </p>
+                                <p class="text-[11px] text-gray-500 mt-1" x-show="premiumQuotaSummary.percent === null">
+                                    Unlimited / mixed
+                                </p>
+                            </div>
+                            <div class="rounded-xl bg-space-950/70 border border-space-border/60 p-3">
+                                <p class="text-xs text-gray-500 mb-1">Pool Strategy</p>
+                                <p class="text-sm font-bold text-white capitalize" x-text="(accountPool.strategy || 'sticky').replace('-', ' ')"></p>
+                                <p class="text-[11px] text-gray-500 mt-1">Current: <span class="text-gray-300" x-text="accountPool.currentAccountId || 'N/A'"></span></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Paused Accounts</div>
-                        <div class="text-3xl font-bold text-yellow-400" x-text="accountPool.accounts.filter(a => a.paused).length"></div>
-                        <div class="text-xs text-gray-500 mt-2">
-                            Active <span class="text-gray-300" x-text="accountPool.accounts.filter(a => a.active && !a.paused).length"></span>
-                        </div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                        <div class="text-gray-500 text-sm font-medium mb-2">Premium Quota (All Accounts)</div>
-                        <div class="text-xl font-bold text-neon-cyan" x-text="premiumQuotaSummary.text"></div>
-                        <div class="text-xs text-gray-500 mt-2" x-show="premiumQuotaSummary.percent !== null">
-                            Remaining <span class="text-gray-300" x-text="premiumQuotaSummary.percent + '%'"></span>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- All Accounts Quota -->
-                <div class="space-y-4">
-                    <template x-for="account in accountPool.accounts" :key="account.id">
-                        <div class="bg-space-900 border border-space-border rounded-xl p-6">
-                            <div class="flex items-center justify-between mb-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-neon-purple to-blue-600 flex items-center justify-center text-white font-bold">
-                                        <span x-text="account.login.charAt(0).toUpperCase()"></span>
-                                    </div>
-                                    <div>
-                                        <h3 class="font-semibold text-white" x-text="account.login"></h3>
-                                        <div class="text-xs text-gray-500">
-                                            <span x-text="account.requestCount + ' requests'"></span>
-                                            <span class="mx-1">•</span>
-                                            <span x-text="'Last used: ' + formatRelativeTime(account.lastUsed)"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="px-2 py-1 text-xs rounded"
-                                          :class="{
-                                              'bg-neon-green/10 text-neon-green': account.active && !account.rateLimited && !account.paused,
-                                              'bg-yellow-500/10 text-yellow-400': account.rateLimited && !account.paused,
-                                              'bg-orange-500/10 text-orange-400': account.paused && account.pausedReason === 'quota',
-                                              'bg-gray-500/10 text-gray-400': account.paused && account.pausedReason !== 'quota',
-                                              'bg-red-500/10 text-red-400': !account.active && !account.paused
-                                          }"
-                                          x-text="account.paused ? (account.pausedReason === 'quota' ? 'Low Quota' : 'Paused') : (account.active ? (account.rateLimited ? 'Rate Limited' : 'Active') : 'Inactive')">
-                                    </span>
+                        <div class="mt-4 rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm font-medium text-white">Premium Quota Pressure</p>
+                                <span class="text-xs"
+                                      :class="{
+                                          'text-emerald-300': premiumQuotaSummary.percent === null || premiumQuotaSummary.percent > 50,
+                                          'text-yellow-300': premiumQuotaSummary.percent !== null && premiumQuotaSummary.percent <= 50 && premiumQuotaSummary.percent > 20,
+                                          'text-red-300': premiumQuotaSummary.percent !== null && premiumQuotaSummary.percent <= 20
+                                      }"
+                                      x-text="premiumQuotaSummary.percent === null ? 'Unlimited' : (premiumQuotaSummary.percent + '% remaining')">
+                                </span>
+                            </div>
+                            <div class="mt-3 h-2 rounded-full bg-space-800 overflow-hidden">
+                                <div class="h-2 rounded-full transition-all duration-500"
+                                     :class="{
+                                         'bg-gradient-to-r from-emerald-400 to-neon-green': premiumQuotaSummary.percent === null || premiumQuotaSummary.percent > 50,
+                                         'bg-gradient-to-r from-yellow-400 to-orange-500': premiumQuotaSummary.percent !== null && premiumQuotaSummary.percent <= 50 && premiumQuotaSummary.percent > 20,
+                                         'bg-gradient-to-r from-red-500 to-pink-500': premiumQuotaSummary.percent !== null && premiumQuotaSummary.percent <= 20
+                                     }"
+                                     :style="'width: ' + (premiumQuotaSummary.text === 'N/A' ? 0 : (premiumQuotaSummary.percent === null ? 100 : premiumQuotaSummary.percent)) + '%'">
                                 </div>
                             </div>
-
-                            <!-- Quota Bars -->
-                            <template x-if="account.quota">
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <!-- Chat Quota -->
-                                    <div class="bg-space-950 rounded-lg p-4">
-                                        <div class="flex items-center justify-between mb-3">
-                                            <h4 class="font-medium text-white text-sm">Chat</h4>
-                                            <span x-show="account.quota?.chat?.unlimited" class="px-2 py-0.5 text-xs bg-neon-green/20 text-neon-green rounded">Unlimited</span>
-                                        </div>
-                                        <div class="flex justify-between text-sm mb-2">
-                                            <span class="text-gray-400">Remaining</span>
-                                            <span class="text-white" x-text="account.quota?.chat?.unlimited ? '∞' : (account.quota?.chat?.remaining + ' / ' + account.quota?.chat?.entitlement)"></span>
-                                        </div>
-                                        <div class="w-full bg-space-800 rounded-full h-2">
-                                            <div class="h-2 rounded-full bg-gradient-to-r from-neon-cyan to-blue-500 transition-all"
-                                                 :style="'width: ' + (account.quota?.chat?.unlimited ? 100 : account.quota?.chat?.percentRemaining) + '%'"></div>
-                                        </div>
-                                        <div class="text-xs text-gray-500 mt-1" x-text="(account.quota?.chat?.percentRemaining?.toFixed(1) || 0) + '% remaining'"></div>
-                                    </div>
-
-                                    <!-- Completions Quota -->
-                                    <div class="bg-space-950 rounded-lg p-4">
-                                        <div class="flex items-center justify-between mb-3">
-                                            <h4 class="font-medium text-white text-sm">Completions</h4>
-                                            <span x-show="account.quota?.completions?.unlimited" class="px-2 py-0.5 text-xs bg-neon-green/20 text-neon-green rounded">Unlimited</span>
-                                        </div>
-                                        <div class="flex justify-between text-sm mb-2">
-                                            <span class="text-gray-400">Remaining</span>
-                                            <span class="text-white" x-text="account.quota?.completions?.unlimited ? '∞' : (account.quota?.completions?.remaining + ' / ' + account.quota?.completions?.entitlement)"></span>
-                                        </div>
-                                        <div class="w-full bg-space-800 rounded-full h-2">
-                                            <div class="h-2 rounded-full bg-gradient-to-r from-neon-purple to-pink-500 transition-all"
-                                                 :style="'width: ' + (account.quota?.completions?.unlimited ? 100 : account.quota?.completions?.percentRemaining) + '%'"></div>
-                                        </div>
-                                        <div class="text-xs text-gray-500 mt-1" x-text="(account.quota?.completions?.percentRemaining?.toFixed(1) || 0) + '% remaining'"></div>
-                                    </div>
-
-                                    <!-- Premium Interactions Quota -->
-                                    <div class="bg-space-950 rounded-lg p-4">
-                                        <div class="flex items-center justify-between mb-3">
-                                            <h4 class="font-medium text-white text-sm">Premium</h4>
-                                            <span x-show="account.quota?.premiumInteractions?.unlimited" class="px-2 py-0.5 text-xs bg-neon-green/20 text-neon-green rounded">Unlimited</span>
-                                        </div>
-                                        <div class="flex justify-between text-sm mb-2">
-                                            <span class="text-gray-400">Remaining</span>
-                                            <span class="text-white" x-text="account.quota?.premiumInteractions?.unlimited ? '∞' : (account.quota?.premiumInteractions?.remaining + ' / ' + account.quota?.premiumInteractions?.entitlement)"></span>
-                                        </div>
-                                        <div class="w-full bg-space-800 rounded-full h-2">
-                                            <div class="h-2 rounded-full transition-all"
-                                                 :class="{
-                                                     'bg-gradient-to-r from-neon-green to-emerald-500': account.quota?.premiumInteractions?.percentRemaining > 50,
-                                                     'bg-gradient-to-r from-yellow-500 to-orange-500': account.quota?.premiumInteractions?.percentRemaining <= 50 && account.quota?.premiumInteractions?.percentRemaining > 20,
-                                                     'bg-gradient-to-r from-red-500 to-pink-500': account.quota?.premiumInteractions?.percentRemaining <= 20
-                                                 }"
-                                                 :style="'width: ' + (account.quota?.premiumInteractions?.unlimited ? 100 : account.quota?.premiumInteractions?.percentRemaining) + '%'"></div>
-                                        </div>
-                                        <div class="text-xs text-gray-500 mt-1" x-text="(account.quota?.premiumInteractions?.percentRemaining?.toFixed(1) || 0) + '% remaining'"></div>
-                                    </div>
-                                </div>
-                            </template>
-
-                            <!-- No quota data -->
-                            <template x-if="!account.quota">
-                                <div class="text-center py-6 text-gray-500">
-                                    <svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                    </svg>
-                                    <p class="text-sm">No quota data available</p>
-                                    <p class="text-xs mt-1">Click "Refresh Quotas" to fetch quota information</p>
-                                </div>
-                            </template>
                         </div>
+                    </section>
+
+                    <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                        <h2 class="text-lg font-semibold text-white mb-4">Account Health</h2>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                <span class="text-sm text-gray-400">Healthy</span>
+                                <span class="text-sm font-bold text-emerald-300" x-text="usageAccountSummary.active"></span>
+                            </div>
+                            <div class="flex items-center justify-between rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                <span class="text-sm text-gray-400">Low Quota Risk</span>
+                                <span class="text-sm font-bold text-orange-300" x-text="usageAccountSummary.lowQuota"></span>
+                            </div>
+                            <div class="flex items-center justify-between rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                <span class="text-sm text-gray-400">Paused</span>
+                                <span class="text-sm font-bold text-yellow-300" x-text="usageAccountSummary.paused"></span>
+                            </div>
+                            <div class="flex items-center justify-between rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                <span class="text-sm text-gray-400">No Quota Data</span>
+                                <span class="text-sm font-bold text-gray-300" x-text="usageAccountSummary.noQuota"></span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-4 leading-relaxed">
+                            Prioritaskan akun dengan status <span class="text-orange-300">Low Quota</span> untuk rotasi otomatis, dan refresh quota setelah perubahan plan akun.
+                        </p>
+                    </section>
+                </div>
+
+                <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
+                    <div>
+                        <h2 class="text-xl font-semibold text-white">Per-Account Quota Details</h2>
+                        <p class="text-sm text-gray-500">Rincian quota Chat, Completions, dan Premium Interactions untuk setiap akun.</p>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        Updated: <span class="text-gray-300" x-text="new Date().toLocaleTimeString()"></span>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <template x-for="account in accountPool.accounts" :key="account.id">
+                        <article class="relative overflow-hidden rounded-2xl border p-5"
+                                 :class="isCurrentAccount(account.id) ? 'bg-space-900 border-neon-cyan/40' : 'bg-space-900 border-space-border'">
+                            <div class="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full blur-3xl"
+                                 :class="isCurrentAccount(account.id) ? 'bg-neon-cyan/10' : 'bg-neon-purple/10'"></div>
+                            <div class="relative">
+                                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-neon-purple to-blue-600 flex items-center justify-center text-white font-bold shrink-0">
+                                            <span x-text="account.login.charAt(0).toUpperCase()"></span>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <h3 class="font-semibold text-white truncate" x-text="account.login"></h3>
+                                                <span x-show="isCurrentAccount(account.id)"
+                                                      class="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30">
+                                                    Current
+                                                </span>
+                                            </div>
+                                            <p class="text-xs text-gray-500">ID: <span x-text="account.id"></span></p>
+                                        </div>
+                                    </div>
+                                    <span class="px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap"
+                                          :class="getUsageStatusClass(account)"
+                                          x-text="getUsageStatusLabel(account)">
+                                    </span>
+                                </div>
+
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                                    <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                        <div class="text-[11px] uppercase tracking-wide text-gray-500">Requests</div>
+                                        <div class="text-sm font-semibold text-white" x-text="account.requestCount"></div>
+                                    </div>
+                                    <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                        <div class="text-[11px] uppercase tracking-wide text-gray-500">Errors</div>
+                                        <div class="text-sm font-semibold text-white" x-text="account.errorCount"></div>
+                                    </div>
+                                    <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                        <div class="text-[11px] uppercase tracking-wide text-gray-500">Effective Quota</div>
+                                        <div class="text-sm font-semibold"
+                                             :class="{
+                                                 'text-emerald-300': getEffectiveAccountQuotaPercent(account) === null || getEffectiveAccountQuotaPercent(account) > 50,
+                                                 'text-yellow-300': getEffectiveAccountQuotaPercent(account) !== null && getEffectiveAccountQuotaPercent(account) <= 50 && getEffectiveAccountQuotaPercent(account) > 20,
+                                                 'text-red-300': getEffectiveAccountQuotaPercent(account) !== null && getEffectiveAccountQuotaPercent(account) <= 20
+                                             }"
+                                             x-text="getEffectiveAccountQuotaPercent(account) === null ? 'N/A' : (getEffectiveAccountQuotaPercent(account) + '%')">
+                                        </div>
+                                    </div>
+                                    <div class="rounded-lg bg-space-950/70 border border-space-border/60 px-3 py-2">
+                                        <div class="text-[11px] uppercase tracking-wide text-gray-500">Last Used</div>
+                                        <div class="text-sm font-semibold text-white" x-text="formatRelativeTime(account.lastUsed)"></div>
+                                    </div>
+                                </div>
+
+                                <template x-if="account.quota">
+                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <h4 class="text-sm font-semibold text-white">Chat</h4>
+                                                <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                                      :class="{
+                                                          'bg-emerald-500/15 text-emerald-300': account.quota?.chat?.unlimited || account.quota?.chat?.percentRemaining > 50,
+                                                          'bg-yellow-500/15 text-yellow-300': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 50 && account.quota?.chat?.percentRemaining > 20,
+                                                          'bg-red-500/15 text-red-300': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 20
+                                                      }"
+                                                      x-text="account.quota?.chat?.unlimited ? 'Unlimited' : ((account.quota?.chat?.percentRemaining ?? 0).toFixed(0) + '%')">
+                                                </span>
+                                            </div>
+                                            <div class="text-xs text-gray-400 mb-2">
+                                                <span x-text="account.quota?.chat?.unlimited ? '∞' : (account.quota?.chat?.remaining + ' / ' + account.quota?.chat?.entitlement)"></span>
+                                            </div>
+                                            <div class="h-2 rounded-full bg-space-800 overflow-hidden">
+                                                <div class="h-2 rounded-full transition-all duration-500"
+                                                     :class="{
+                                                         'bg-gradient-to-r from-neon-cyan to-blue-500': account.quota?.chat?.unlimited || account.quota?.chat?.percentRemaining > 50,
+                                                         'bg-gradient-to-r from-yellow-500 to-orange-500': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 50 && account.quota?.chat?.percentRemaining > 20,
+                                                         'bg-gradient-to-r from-red-500 to-pink-500': !account.quota?.chat?.unlimited && account.quota?.chat?.percentRemaining <= 20
+                                                     }"
+                                                     :style="'width: ' + (account.quota?.chat?.unlimited ? 100 : (account.quota?.chat?.percentRemaining ?? 0)) + '%'">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <h4 class="text-sm font-semibold text-white">Completions</h4>
+                                                <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                                      :class="{
+                                                          'bg-emerald-500/15 text-emerald-300': account.quota?.completions?.unlimited || account.quota?.completions?.percentRemaining > 50,
+                                                          'bg-yellow-500/15 text-yellow-300': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 50 && account.quota?.completions?.percentRemaining > 20,
+                                                          'bg-red-500/15 text-red-300': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 20
+                                                      }"
+                                                      x-text="account.quota?.completions?.unlimited ? 'Unlimited' : ((account.quota?.completions?.percentRemaining ?? 0).toFixed(0) + '%')">
+                                                </span>
+                                            </div>
+                                            <div class="text-xs text-gray-400 mb-2">
+                                                <span x-text="account.quota?.completions?.unlimited ? '∞' : (account.quota?.completions?.remaining + ' / ' + account.quota?.completions?.entitlement)"></span>
+                                            </div>
+                                            <div class="h-2 rounded-full bg-space-800 overflow-hidden">
+                                                <div class="h-2 rounded-full transition-all duration-500"
+                                                     :class="{
+                                                         'bg-gradient-to-r from-neon-purple to-fuchsia-500': account.quota?.completions?.unlimited || account.quota?.completions?.percentRemaining > 50,
+                                                         'bg-gradient-to-r from-yellow-500 to-orange-500': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 50 && account.quota?.completions?.percentRemaining > 20,
+                                                         'bg-gradient-to-r from-red-500 to-pink-500': !account.quota?.completions?.unlimited && account.quota?.completions?.percentRemaining <= 20
+                                                     }"
+                                                     :style="'width: ' + (account.quota?.completions?.unlimited ? 100 : (account.quota?.completions?.percentRemaining ?? 0)) + '%'">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-4">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <h4 class="text-sm font-semibold text-white">Premium</h4>
+                                                <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                                      :class="{
+                                                          'bg-emerald-500/15 text-emerald-300': account.quota?.premiumInteractions?.unlimited || account.quota?.premiumInteractions?.percentRemaining > 50,
+                                                          'bg-yellow-500/15 text-yellow-300': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 50 && account.quota?.premiumInteractions?.percentRemaining > 20,
+                                                          'bg-red-500/15 text-red-300': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 20
+                                                      }"
+                                                      x-text="account.quota?.premiumInteractions?.unlimited ? 'Unlimited' : ((account.quota?.premiumInteractions?.percentRemaining ?? 0).toFixed(0) + '%')">
+                                                </span>
+                                            </div>
+                                            <div class="text-xs text-gray-400 mb-2">
+                                                <span x-text="account.quota?.premiumInteractions?.unlimited ? '∞' : (account.quota?.premiumInteractions?.remaining + ' / ' + account.quota?.premiumInteractions?.entitlement)"></span>
+                                            </div>
+                                            <div class="h-2 rounded-full bg-space-800 overflow-hidden">
+                                                <div class="h-2 rounded-full transition-all duration-500"
+                                                     :class="{
+                                                         'bg-gradient-to-r from-neon-green to-emerald-500': account.quota?.premiumInteractions?.unlimited || account.quota?.premiumInteractions?.percentRemaining > 50,
+                                                         'bg-gradient-to-r from-yellow-500 to-orange-500': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 50 && account.quota?.premiumInteractions?.percentRemaining > 20,
+                                                         'bg-gradient-to-r from-red-500 to-pink-500': !account.quota?.premiumInteractions?.unlimited && account.quota?.premiumInteractions?.percentRemaining <= 20
+                                                     }"
+                                                     :style="'width: ' + (account.quota?.premiumInteractions?.unlimited ? 100 : (account.quota?.premiumInteractions?.percentRemaining ?? 0)) + '%'">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <template x-if="!account.quota">
+                                    <div class="rounded-xl border border-dashed border-space-border bg-space-950/60 p-6 text-center">
+                                        <svg class="w-8 h-8 mx-auto mb-2 text-gray-600 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
+                                        <p class="text-sm text-gray-400">Quota data belum tersedia</p>
+                                        <p class="text-xs text-gray-500 mt-1">Klik <span class="text-neon-cyan">Refresh Quotas</span> untuk mengambil data terbaru.</p>
+                                    </div>
+                                </template>
+
+                                <div x-show="account.lastError" class="mt-4 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                                    Last error: <span class="font-mono break-all" x-text="account.lastError"></span>
+                                </div>
+                            </div>
+                        </article>
                     </template>
 
-                    <!-- No accounts -->
-                    <div x-show="accountPool.accounts.length === 0" class="bg-space-900 border border-space-border rounded-xl p-12 text-center">
+                    <div x-show="accountPool.accounts.length === 0" class="bg-space-900 border border-space-border rounded-2xl p-12 text-center">
                         <svg class="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                         <p class="text-gray-400 mb-2">No accounts configured</p>
-                        <p class="text-sm text-gray-600">Add GitHub accounts in the Accounts tab to see usage quotas</p>
+                        <p class="text-sm text-gray-600">Add GitHub accounts in the Accounts tab to see usage quotas.</p>
                     </div>
                 </div>
             </div>
