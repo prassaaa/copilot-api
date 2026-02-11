@@ -15,7 +15,7 @@
         "srvx": "^0.8.9",
         "tiny-invariant": "^1.3.3",
         "undici": "^7.16.0",
-        "zod": "^4.1.11",
+        "zod": "^4.1.11"
       },
       "devDependencies": {
         "@echristian/eslint-config": "^0.0.54",
@@ -28,9 +28,9 @@
         "prettier-plugin-packagejson": "^2.5.19",
         "simple-git-hooks": "^2.13.1",
         "tsdown": "^0.15.6",
-        "typescript": "^5.9.1-rc",
-      },
-    },
+        "typescript": "^5.9.1-rc"
+      }
+    }
   },
   "packages": {
     "@altano/repository-tools": ["@altano/repository-tools@2.0.1", "", {}, "sha512-YE/52CkFtb+YtHPgbWPai7oo5N9AKnMuP5LM+i2AG7G1H2jdYBCO1iDnkDE3dZ3C1MIgckaF+d5PNRulgt0bdw=="],
@@ -1027,6 +1027,6 @@
 
     "wrap-ansi/string-width/emoji-regex": ["emoji-regex@10.5.0", "", {}, "sha512-lb49vf1Xzfx080OKA0o6l8DQQpV+6Vg95zyCJX9VB/BqKYlhG7N4wgROUUHRA+ZPUefLnteQOad7z1kT2bV7bg=="],
 
-    "yargs/string-width/emoji-regex": ["emoji-regex@10.5.0", "", {}, "sha512-lb49vf1Xzfx080OKA0o6l8DQQpV+6Vg95zyCJX9VB/BqKYlhG7N4wgROUUHRA+ZPUefLnteQOad7z1kT2bV7bg=="],
+    "yargs/string-width/emoji-regex": ["emoji-regex@10.5.0", "", {}, "sha512-lb49vf1Xzfx080OKA0o6l8DQQpV+6Vg95zyCJX9VB/BqKYlhG7N4wgROUUHRA+ZPUefLnteQOad7z1kT2bV7bg=="]
   }
 }
