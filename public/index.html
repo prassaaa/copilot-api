@@ -2062,148 +2062,185 @@
             </div>
 
             <!-- Request History View -->
-            <div x-show="activeTab === 'history'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold text-white">Request History</h1>
-                    <div class="flex gap-2">
-                        <button @click="fetchRequestHistory()"
-                                class="px-4 py-2 text-sm bg-neon-cyan/20 text-neon-cyan rounded-lg hover:bg-neon-cyan/30 transition-colors">
-                            Refresh
-                        </button>
-                        <button @click="clearRequestHistory()"
-                                class="px-4 py-2 text-sm bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors">
-                            Clear History
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Stats Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="bg-space-900 border border-space-border rounded-xl p-4">
-                        <div class="text-gray-500 text-sm">Total Requests</div>
-                        <div class="text-2xl font-bold text-white" x-text="historyStats.total || 0"></div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-4">
-                        <div class="text-gray-500 text-sm">Success Rate</div>
-                        <div class="text-2xl font-bold text-neon-green" x-text="((historyStats.byStatus?.success || 0) / Math.max(historyStats.total, 1) * 100).toFixed(1) + '%'"></div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-4">
-                        <div class="text-gray-500 text-sm">Cache Hit Rate</div>
-                        <div class="text-2xl font-bold text-neon-cyan" x-text="((historyStats.cacheHitRate || 0) * 100).toFixed(1) + '%'"></div>
-                    </div>
-                    <div class="bg-space-900 border border-space-border rounded-xl p-4">
-                        <div class="text-gray-500 text-sm">Total Cost</div>
-                        <div class="text-2xl font-bold text-neon-purple" x-text="'$' + (historyStats.totalCost || 0).toFixed(4)"></div>
-                    </div>
-                </div>
-
-                <!-- Filters -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-4 mb-4">
-                    <div class="flex flex-wrap gap-4 items-center">
-                        <div class="flex-1 min-w-[150px]">
-                            <label class="block text-xs text-gray-500 mb-1">Model</label>
-                            <input type="text" x-model="historyFilter.model" @input="fetchRequestHistory()"
-                                   placeholder="Filter by model..."
-                                   class="w-full px-3 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+            <div x-show="activeTab === 'history'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-20 -right-16 h-56 w-56 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-16 -left-12 h-56 w-56 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="relative space-y-6">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Request Analytics</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">Request History Command Center</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Audit request outcomes, identify model-level trends, and inspect routing behavior over time.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button @click="fetchRequestHistory()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
+                                    Refresh
+                                </button>
+                                <button @click="clearRequestHistory()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-colors">
+                                    Clear History
+                                </button>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 mb-1">Status</label>
-                            <select x-model="historyFilter.status" @change="fetchRequestHistory()"
-                                    class="px-3 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+
+                        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Total Requests</p>
+                                <p class="text-2xl font-bold text-white" x-text="historyStats.total || 0"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Success Rate</p>
+                                <p class="text-xl font-bold text-emerald-300" x-text="((historyStats.byStatus?.success || 0) / Math.max(historyStats.total, 1) * 100).toFixed(1) + '%'"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Cache Hit Rate</p>
+                                <p class="text-xl font-bold text-neon-cyan" x-text="((historyStats.cacheHitRate || 0) * 100).toFixed(1) + '%'"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Errors</p>
+                                <p class="text-xl font-bold text-red-300" x-text="historyStats.byStatus?.error || 0"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Total Cost</p>
+                                <p class="text-xl font-bold text-neon-purple" x-text="'$' + (historyStats.totalCost || 0).toFixed(4)"></p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                    <div class="flex flex-col xl:flex-row xl:items-end gap-3">
+                        <div class="flex-1">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Model</label>
+                            <input type="text"
+                                   x-model="historyFilter.model"
+                                   @input="fetchRequestHistory()"
+                                   placeholder="Filter by model..."
+                                   class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                        </div>
+                        <div class="w-full sm:w-44">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Status</label>
+                            <select x-model="historyFilter.status"
+                                    @change="fetchRequestHistory()"
+                                    class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
                                 <option value="">All</option>
                                 <option value="success">Success</option>
                                 <option value="error">Error</option>
                                 <option value="cached">Cached</option>
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 mb-1">Account</label>
-                            <select x-model="historyFilter.accountId" @change="fetchRequestHistory()"
-                                    class="px-3 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
+                        <div class="w-full sm:w-52">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Account</label>
+                            <select x-model="historyFilter.accountId"
+                                    @change="fetchRequestHistory()"
+                                    class="w-full px-3 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:border-neon-purple focus:outline-none">
                                 <option value="">All Accounts</option>
                                 <template x-for="account in accountPool.accounts" :key="account.id">
                                     <option :value="account.id" x-text="account.login"></option>
                                 </template>
                             </select>
                         </div>
+                        <button @click="historyFilter.model = ''; historyFilter.status = ''; historyFilter.accountId = ''; historyOffset = 0; fetchRequestHistory()"
+                                class="px-4 py-2.5 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 transition-colors">
+                            Reset Filters
+                        </button>
                     </div>
-                </div>
+                </section>
 
-                <!-- History Table -->
-                <div class="bg-space-900 border border-space-border rounded-xl overflow-hidden">
+                <section class="bg-space-900 border border-space-border rounded-2xl overflow-hidden">
+                    <div class="px-5 py-3 border-b border-space-border/70 flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-sm font-semibold text-white">Request Entries</h2>
+                        <div class="text-xs text-gray-500">
+                            Showing <span class="text-gray-300" x-text="requestHistoryEntries.length"></span> entries
+                        </div>
+                    </div>
+
                     <div class="overflow-x-auto">
-                        <table class="w-full">
-                            <thead class="bg-space-950">
+                        <table class="w-full min-w-[980px]">
+                            <thead class="bg-space-950/80">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tokens</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Model</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Account</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Tokens</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cost</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Duration</th>
+                                    <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-space-border">
+                            <tbody class="divide-y divide-space-border/60">
                                 <template x-for="entry in requestHistoryEntries" :key="entry.id">
-                                    <tr class="hover:bg-space-800/50">
-                                        <td class="px-4 py-3 text-sm text-gray-400 whitespace-nowrap" x-text="new Date(entry.timestamp).toLocaleString()"></td>
-                                        <td class="px-4 py-3 text-sm">
-                                            <span class="px-2 py-0.5 text-xs rounded"
+                                    <tr class="hover:bg-space-800/35 transition-colors">
+                                        <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap" x-text="new Date(entry.timestamp).toLocaleString()"></td>
+                                        <td class="px-4 py-3">
+                                            <span class="px-2 py-0.5 text-[11px] rounded border"
                                                   :class="{
-                                                      'bg-blue-500/10 text-blue-400': entry.type === 'chat',
-                                                      'bg-purple-500/10 text-purple-400': entry.type === 'message',
-                                                      'bg-cyan-500/10 text-cyan-400': entry.type === 'embedding'
+                                                      'bg-blue-500/10 text-blue-300 border-blue-500/30': entry.type === 'chat',
+                                                      'bg-purple-500/10 text-purple-300 border-purple-500/30': entry.type === 'message',
+                                                      'bg-cyan-500/10 text-cyan-300 border-cyan-500/30': entry.type === 'embedding'
                                                   }"
-                                                  x-text="entry.type"></span>
+                                                  x-text="entry.type">
+                                            </span>
                                         </td>
                                         <td class="px-4 py-3 text-sm text-white font-mono" x-text="entry.model"></td>
                                         <td class="px-4 py-3 text-sm text-gray-400" x-text="entry.accountId || '-'"></td>
                                         <td class="px-4 py-3 text-sm text-gray-400">
                                             <span x-text="entry.tokens.input"></span> / <span x-text="entry.tokens.output"></span>
                                         </td>
-                                        <td class="px-4 py-3 text-sm text-neon-purple" x-text="'$' + entry.cost.toFixed(6)"></td>
+                                        <td class="px-4 py-3 text-sm text-neon-purple font-medium" x-text="'$' + entry.cost.toFixed(6)"></td>
                                         <td class="px-4 py-3 text-sm text-gray-400" x-text="entry.duration + 'ms'"></td>
-                                        <td class="px-4 py-3 text-sm">
-                                            <span class="px-2 py-0.5 text-xs rounded"
+                                        <td class="px-4 py-3">
+                                            <span class="px-2 py-0.5 text-[11px] rounded border"
                                                   :class="{
-                                                      'bg-green-500/10 text-green-400': entry.status === 'success',
-                                                      'bg-red-500/10 text-red-400': entry.status === 'error',
-                                                      'bg-cyan-500/10 text-cyan-400': entry.status === 'cached'
+                                                      'bg-emerald-500/10 text-emerald-300 border-emerald-500/30': entry.status === 'success',
+                                                      'bg-red-500/10 text-red-300 border-red-500/30': entry.status === 'error',
+                                                      'bg-cyan-500/10 text-cyan-300 border-cyan-500/30': entry.status === 'cached'
                                                   }"
-                                                  x-text="entry.status"></span>
+                                                  x-text="entry.status">
+                                            </span>
                                         </td>
                                     </tr>
                                 </template>
-                                <tr x-show="requestHistoryEntries.length === 0">
-                                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
-                                        No request history yet
-                                    </td>
-                                </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- Pagination -->
-                    <div class="px-4 py-3 bg-space-950 flex items-center justify-between">
+                    <div x-show="requestHistoryEntries.length === 0" class="text-center py-12 text-gray-500">
+                        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h6m-6 0l3-3m-3 3l3 3M3 7h5a2 2 0 012 2v4a2 2 0 01-2 2H3" />
+                        </svg>
+                        <p class="text-gray-400 mb-1">No request history yet</p>
+                        <p class="text-sm text-gray-600">Requests will appear here after traffic flows through the API.</p>
+                    </div>
+
+                    <div class="px-4 py-3 bg-space-950 border-t border-space-border/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <div class="text-sm text-gray-500">
-                            Showing <span x-text="historyOffset + 1"></span>-<span x-text="Math.min(historyOffset + requestHistoryEntries.length, historyTotal)"></span> of <span x-text="historyTotal"></span>
+                            Showing
+                            <span class="text-gray-300" x-text="historyTotal === 0 ? 0 : (historyOffset + 1)"></span>
+                            -
+                            <span class="text-gray-300" x-text="Math.min(historyOffset + requestHistoryEntries.length, historyTotal)"></span>
+                            of
+                            <span class="text-gray-300" x-text="historyTotal"></span>
                         </div>
                         <div class="flex gap-2">
                             <button @click="historyOffset = Math.max(0, historyOffset - 50); fetchRequestHistory()"
                                     :disabled="historyOffset === 0"
-                                    class="px-3 py-1 text-sm bg-space-800 text-gray-400 rounded hover:bg-space-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    class="px-3 py-1.5 text-sm rounded-lg bg-space-800 text-gray-300 border border-space-border hover:bg-space-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                                 Previous
                             </button>
                             <button @click="historyOffset += 50; fetchRequestHistory()"
                                     :disabled="!historyHasMore"
-                                    class="px-3 py-1 text-sm bg-space-800 text-gray-400 rounded hover:bg-space-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    class="px-3 py-1.5 text-sm rounded-lg bg-space-800 text-gray-300 border border-space-border hover:bg-space-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                                 Next
                             </button>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
 
             <!-- API Playground View -->
