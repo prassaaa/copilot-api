@@ -1474,195 +1474,227 @@
             </div>
             
             <!-- Logs View -->
-            <div x-show="activeTab === 'logs'" x-cloak>
-                <div class="flex items-center justify-between mb-6">
-                    <div class="flex items-center gap-3">
-                        <h1 class="text-2xl font-bold text-white">Server Logs</h1>
-                        <span class="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full"
-                              :class="logsConnected ? 'bg-neon-green/10 text-neon-green' : 'bg-red-500/10 text-red-400'">
-                            <span class="w-1.5 h-1.5 rounded-full" :class="logsConnected ? 'bg-neon-green' : 'bg-red-400'"></span>
-                            <span x-text="logsConnected ? 'Connected' : 'Disconnected'"></span>
-                        </span>
-                        <span class="text-xs text-gray-500">
-                            (<span x-text="filteredLogs.length"></span> / <span x-text="logs.length"></span> logs)
-                        </span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button @click="loadRecentLogs()"
-                                class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                                title="Reload recent logs">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                        </button>
-                        <div class="relative" x-data="{ showExportMenu: false }">
-                            <button @click="showExportMenu = !showExportMenu"
-                                    class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                                    title="Export logs">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                            </button>
-                            <div x-show="showExportMenu" @click.away="showExportMenu = false"
-                                 class="absolute right-0 mt-2 w-40 bg-space-900 border border-space-border rounded-lg shadow-lg z-10">
-                                <button @click="exportLogs(); showExportMenu = false"
-                                        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-space-800 hover:text-white rounded-t-lg">
-                                    Export as JSON
+            <div x-show="activeTab === 'logs'" x-cloak class="space-y-6">
+                <section class="relative overflow-hidden rounded-2xl border border-space-border bg-space-900/95 p-6 md:p-8">
+                    <div class="pointer-events-none absolute -top-20 -right-16 h-56 w-56 rounded-full bg-neon-cyan/10 blur-3xl"></div>
+                    <div class="pointer-events-none absolute -bottom-16 -left-10 h-56 w-56 rounded-full bg-neon-purple/10 blur-3xl"></div>
+                    <div class="relative space-y-6">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <p class="text-[11px] font-semibold tracking-[0.24em] uppercase text-gray-500 mb-2">Runtime Telemetry</p>
+                                <h1 class="text-2xl md:text-3xl font-bold text-white">Server Logs Command Center</h1>
+                                <p class="text-sm text-gray-400 mt-2">
+                                    Monitor real-time events, isolate noisy signals, and export filtered logs for diagnostics.
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border"
+                                      :class="logsConnected ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-red-500/10 text-red-300 border-red-500/30'">
+                                    <span class="w-1.5 h-1.5 rounded-full" :class="logsConnected ? 'bg-emerald-300' : 'bg-red-300'"></span>
+                                    <span x-text="logsConnected ? 'Connected' : 'Disconnected'"></span>
+                                </span>
+                                <span class="px-3 py-2 text-xs rounded-lg border"
+                                      :class="logsPaused ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30' : 'bg-neon-green/10 text-neon-green border-neon-green/30'"
+                                      x-text="logsPaused ? 'Stream Paused' : 'Stream Live'">
+                                </span>
+                                <button @click="loadRecentLogs()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 hover:text-white transition-colors">
+                                    Reload
                                 </button>
-                                <button @click="exportLogsCSV(); showExportMenu = false"
-                                        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-space-800 hover:text-white rounded-b-lg">
-                                    Export as CSV
+                                <div class="relative" x-data="{ showExportMenu: false }">
+                                    <button @click="showExportMenu = !showExportMenu"
+                                            class="px-4 py-2 text-sm font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition-colors">
+                                        Export
+                                    </button>
+                                    <div x-show="showExportMenu" @click.away="showExportMenu = false"
+                                         class="absolute right-0 mt-2 w-44 bg-space-900 border border-space-border rounded-lg shadow-lg z-10 overflow-hidden">
+                                        <button @click="exportLogs(); showExportMenu = false"
+                                                class="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-space-800 hover:text-white">
+                                            Export as JSON
+                                        </button>
+                                        <button @click="exportLogsCSV(); showExportMenu = false"
+                                                class="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-space-800 hover:text-white border-t border-space-border/60">
+                                            Export as CSV
+                                        </button>
+                                    </div>
+                                </div>
+                                <button @click="clearLogs()"
+                                        class="px-4 py-2 text-sm font-medium rounded-lg bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-colors">
+                                    Clear
                                 </button>
                             </div>
                         </div>
-                        <button @click="clearLogs()"
-                                class="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
-                                title="Clear logs">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
 
-                <!-- Logs Controls -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-4 mb-4">
-                    <div class="flex flex-wrap items-center gap-4">
-                        <!-- Search -->
-                        <div class="flex-1 min-w-[200px]">
-                            <div class="relative">
-                                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                                <input type="text"
-                                       x-model="logsSearch"
-                                       placeholder="Search logs..."
-                                       class="w-full pl-10 pr-4 py-2 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:ring-2 focus:ring-neon-purple/50 focus:border-neon-purple outline-none">
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Total Logs</p>
+                                <p class="text-2xl font-bold text-white" x-text="logs.length"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Visible Logs</p>
+                                <p class="text-2xl font-bold text-neon-cyan" x-text="filteredLogs.length"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Errors (Visible)</p>
+                                <p class="text-2xl font-bold text-red-300" x-text="filteredLogs.filter((log) => log.level === 'error').length"></p>
+                            </div>
+                            <div class="rounded-xl border border-space-border/70 bg-space-950/70 p-4">
+                                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Auto-scroll</p>
+                                <p class="text-lg font-bold" :class="logsAutoScroll ? 'text-emerald-300' : 'text-gray-300'" x-text="logsAutoScroll ? 'Enabled' : 'Disabled'"></p>
                             </div>
                         </div>
+                    </div>
+                </section>
 
-                        <!-- Level Filter -->
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-gray-500">Level:</span>
-                            <div class="flex gap-1">
+                <section class="bg-space-900 border border-space-border rounded-2xl p-5">
+                    <div class="flex flex-col xl:flex-row xl:items-center gap-3">
+                        <div class="relative flex-1">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input type="text"
+                                   x-model="logsSearch"
+                                   placeholder="Search by message or level..."
+                                   class="w-full pl-10 pr-4 py-2.5 bg-space-950 border border-space-border rounded-lg text-white text-sm focus:ring-2 focus:ring-neon-purple/50 focus:border-neon-purple outline-none">
+                        </div>
+                        <button @click="logsSearch = ''; logsFilter = 'all'; logsErrorsOnly = false; logsDateFrom = ''; logsDateTo = ''"
+                                class="px-4 py-2.5 text-sm font-medium rounded-lg bg-space-950 text-gray-300 border border-space-border hover:border-gray-500 transition-colors">
+                            Reset Filters
+                        </button>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 2xl:grid-cols-3 gap-3">
+                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-3">
+                            <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-2">Level Filter</p>
+                            <div class="flex flex-wrap gap-1.5">
                                 <button @click="logsFilter = 'all'"
-                                        class="px-2.5 py-1 text-xs rounded transition-colors"
-                                        :class="logsFilter === 'all' ? 'bg-neon-purple text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
+                                        class="px-2.5 py-1 text-xs rounded-md transition-colors border"
+                                        :class="logsFilter === 'all' ? 'bg-neon-purple/20 text-neon-purple border-neon-purple/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
                                     All
                                 </button>
                                 <button @click="logsFilter = 'info'"
-                                        class="px-2.5 py-1 text-xs rounded transition-colors"
-                                        :class="logsFilter === 'info' ? 'bg-blue-500 text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
+                                        class="px-2.5 py-1 text-xs rounded-md transition-colors border"
+                                        :class="logsFilter === 'info' ? 'bg-blue-500/20 text-blue-300 border-blue-500/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
                                     Info
                                 </button>
                                 <button @click="logsFilter = 'warn'"
-                                        class="px-2.5 py-1 text-xs rounded transition-colors"
-                                        :class="logsFilter === 'warn' ? 'bg-yellow-500 text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
+                                        class="px-2.5 py-1 text-xs rounded-md transition-colors border"
+                                        :class="logsFilter === 'warn' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
                                     Warn
                                 </button>
                                 <button @click="logsFilter = 'error'"
-                                        class="px-2.5 py-1 text-xs rounded transition-colors"
-                                        :class="logsFilter === 'error' ? 'bg-red-500 text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
+                                        class="px-2.5 py-1 text-xs rounded-md transition-colors border"
+                                        :class="logsFilter === 'error' ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
                                     Error
                                 </button>
                                 <button @click="logsFilter = 'success'"
-                                        class="px-2.5 py-1 text-xs rounded transition-colors"
-                                        :class="logsFilter === 'success' ? 'bg-green-500 text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
+                                        class="px-2.5 py-1 text-xs rounded-md transition-colors border"
+                                        :class="logsFilter === 'success' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
                                     Success
                                 </button>
                                 <button @click="logsFilter = 'debug'"
-                                        class="px-2.5 py-1 text-xs rounded transition-colors"
-                                        :class="logsFilter === 'debug' ? 'bg-gray-500 text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
+                                        class="px-2.5 py-1 text-xs rounded-md transition-colors border"
+                                        :class="logsFilter === 'debug' ? 'bg-gray-500/20 text-gray-300 border-gray-500/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
                                     Debug
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Errors Only -->
-                        <div class="flex items-center gap-2">
-                            <button @click="logsErrorsOnly = !logsErrorsOnly"
-                                    class="px-2.5 py-1 text-xs rounded transition-colors"
-                                    :class="logsErrorsOnly ? 'bg-red-500 text-white' : 'bg-space-800 text-gray-400 hover:bg-space-700'">
-                                Errors only
-                            </button>
-                        </div>
-
-                        <!-- Date Range Filter -->
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-gray-500">Date:</span>
-                            <input type="datetime-local"
-                                   x-model="logsDateFrom"
-                                   class="px-2 py-1 bg-space-950 border border-space-border rounded text-white text-xs focus:border-neon-purple focus:outline-none">
-                            <span class="text-gray-500">to</span>
-                            <input type="datetime-local"
-                                   x-model="logsDateTo"
-                                   class="px-2 py-1 bg-space-950 border border-space-border rounded text-white text-xs focus:border-neon-purple focus:outline-none">
-                            <button @click="logsDateFrom = ''; logsDateTo = ''"
-                                    x-show="logsDateFrom || logsDateTo"
-                                    class="p-1 text-gray-400 hover:text-white"
-                                    title="Clear date filter">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <!-- Pause/Resume & Auto-scroll -->
-                        <div class="flex items-center gap-3">
-                            <button @click="toggleLogsPause()"
-                                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors"
-                                    :class="logsPaused ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-500/20 text-yellow-400'">
-                                <svg x-show="!logsPaused" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                                </svg>
-                                <svg x-show="logsPaused" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M8 5v14l11-7z"/>
-                                </svg>
-                                <span x-text="logsPaused ? 'Resume' : 'Pause'"></span>
-                            </button>
-                            <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                                <input type="checkbox" x-model="logsAutoScroll" class="rounded bg-space-900 border-space-border w-4 h-4">
-                                Auto-scroll
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Logs Container -->
-                <div class="bg-space-900 border border-space-border rounded-xl p-4 h-[calc(100vh-320px)] overflow-auto font-mono text-sm"
-                     x-ref="logsContainer">
-                    <template x-for="(log, index) in filteredLogs" :key="index">
-                        <div class="py-1.5 border-b border-space-border/50 last:border-0 hover:bg-white/5 px-2 -mx-2 rounded">
-                            <div class="flex items-start gap-2">
-                                <span class="text-gray-600 text-xs whitespace-nowrap" x-text="formatLogTime(log.timestamp)"></span>
-                                <span class="px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-                                      :class="{
-                                          'bg-blue-500/20 text-blue-400': log.level === 'info',
-                                          'bg-yellow-500/20 text-yellow-400': log.level === 'warn',
-                                          'bg-red-500/20 text-red-400': log.level === 'error',
-                                          'bg-gray-500/20 text-gray-400': log.level === 'debug',
-                                          'bg-green-500/20 text-green-400': log.level === 'success'
-                                      }"
-                                      x-text="log.level.toUpperCase()"></span>
-                                <span class="text-gray-300 break-all" x-text="log.message"></span>
+                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-3">
+                            <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-2">Date Range</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] gap-2 items-center">
+                                <input type="datetime-local"
+                                       x-model="logsDateFrom"
+                                       class="px-2.5 py-1.5 bg-space-900 border border-space-border rounded text-white text-xs focus:border-neon-purple focus:outline-none">
+                                <span class="text-[11px] text-gray-500 text-center">to</span>
+                                <input type="datetime-local"
+                                       x-model="logsDateTo"
+                                       class="px-2.5 py-1.5 bg-space-900 border border-space-border rounded text-white text-xs focus:border-neon-purple focus:outline-none">
+                                <button @click="logsDateFrom = ''; logsDateTo = ''"
+                                        class="px-2 py-1.5 text-xs rounded-md border border-space-border bg-space-900 text-gray-400 hover:text-white transition-colors"
+                                        :class="(logsDateFrom || logsDateTo) ? '' : 'opacity-40 cursor-not-allowed'"
+                                        :disabled="!logsDateFrom && !logsDateTo">
+                                    Clear
+                                </button>
                             </div>
                         </div>
-                    </template>
-                    <div x-show="filteredLogs.length === 0 && logs.length > 0" class="text-gray-500 text-center py-8">
-                        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        <p>No logs match your filter</p>
-                        <button @click="logsFilter = 'all'; logsSearch = ''" class="mt-2 text-neon-purple hover:underline text-sm">Clear filters</button>
+
+                        <div class="rounded-xl border border-space-border/60 bg-space-950/70 p-3">
+                            <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-2">Stream Controls</p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button @click="logsErrorsOnly = !logsErrorsOnly"
+                                        class="px-3 py-1.5 text-xs rounded-md transition-colors border"
+                                        :class="logsErrorsOnly ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-space-900 text-gray-400 border-space-border hover:text-white'">
+                                    Errors Only
+                                </button>
+                                <button @click="toggleLogsPause()"
+                                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors border"
+                                        :class="logsPaused ? 'bg-neon-green/20 text-neon-green border-neon-green/40' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'">
+                                    <svg x-show="!logsPaused" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                                    </svg>
+                                    <svg x-show="logsPaused" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"/>
+                                    </svg>
+                                    <span x-text="logsPaused ? 'Resume' : 'Pause'"></span>
+                                </button>
+                                <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer px-3 py-1.5 rounded-md border border-space-border bg-space-900">
+                                    <input type="checkbox" x-model="logsAutoScroll" class="rounded bg-space-950 border-space-border w-4 h-4">
+                                    Auto-scroll
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div x-show="logs.length === 0" class="text-gray-500 text-center py-8">
-                        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p>No logs yet</p>
-                        <p class="text-sm mt-1">Logs will appear here in real-time</p>
+                </section>
+
+                <section class="bg-space-900 border border-space-border rounded-2xl overflow-hidden">
+                    <div class="px-5 py-3 border-b border-space-border/70 flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-sm font-semibold text-white">Live Stream</h2>
+                        <div class="text-xs text-gray-500">
+                            Showing <span class="text-gray-300" x-text="filteredLogs.length"></span> of <span class="text-gray-300" x-text="logs.length"></span> entries
+                        </div>
                     </div>
-                </div>
+
+                    <div class="h-[calc(100vh-430px)] min-h-[420px] overflow-auto font-mono text-sm px-4 py-3" x-ref="logsContainer">
+                        <template x-for="(log, index) in filteredLogs" :key="index">
+                            <article class="rounded-lg border border-space-border/40 bg-space-950/50 px-3 py-2 mb-2 last:mb-0 hover:border-space-border/70 transition-colors">
+                                <div class="flex items-start gap-3">
+                                    <span class="text-gray-500 text-xs whitespace-nowrap pt-0.5" x-text="formatLogTime(log.timestamp)"></span>
+                                    <span class="px-2 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap border"
+                                          :class="{
+                                              'bg-blue-500/15 text-blue-300 border-blue-500/30': log.level === 'info',
+                                              'bg-yellow-500/15 text-yellow-300 border-yellow-500/30': log.level === 'warn',
+                                              'bg-red-500/15 text-red-300 border-red-500/30': log.level === 'error',
+                                              'bg-gray-500/15 text-gray-300 border-gray-500/30': log.level === 'debug',
+                                              'bg-emerald-500/15 text-emerald-300 border-emerald-500/30': log.level === 'success'
+                                          }"
+                                          x-text="log.level.toUpperCase()">
+                                    </span>
+                                    <p class="text-gray-200 break-all leading-relaxed" x-text="log.message"></p>
+                                </div>
+                            </article>
+                        </template>
+
+                        <div x-show="filteredLogs.length === 0 && logs.length > 0" class="text-gray-500 text-center py-12">
+                            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <p class="text-gray-400 mb-1">No logs match current filters</p>
+                            <button @click="logsFilter = 'all'; logsSearch = ''; logsErrorsOnly = false; logsDateFrom = ''; logsDateTo = ''"
+                                    class="mt-2 px-4 py-2 text-sm rounded-lg bg-neon-purple/20 text-neon-purple hover:bg-neon-purple/30 transition-colors">
+                                Clear Filters
+                            </button>
+                        </div>
+
+                        <div x-show="logs.length === 0" class="text-gray-500 text-center py-12">
+                            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p class="text-gray-400 mb-1">No logs yet</p>
+                            <p class="text-sm text-gray-600">Logs will appear here in real time once requests are processed.</p>
+                        </div>
+                    </div>
+                </section>
             </div>
             
             <!-- Settings View -->
