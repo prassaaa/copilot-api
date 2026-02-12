@@ -32,3 +32,38 @@ modelRoutes.get("/", async (c) => {
     return await forwardError(c, error)
   }
 })
+
+modelRoutes.get("/:id", async (c) => {
+  try {
+    if (!state.models) {
+      await cacheModels()
+    }
+
+    const modelId = c.req.param("id")
+    const model = state.models?.data.find((m) => m.id === modelId)
+
+    if (!model) {
+      return c.json(
+        {
+          error: {
+            message: `Model '${modelId}' not found`,
+            type: "invalid_request_error",
+          },
+        },
+        404,
+      )
+    }
+
+    return c.json({
+      id: model.id,
+      object: "model",
+      type: "model",
+      created: 0,
+      created_at: new Date(0).toISOString(),
+      owned_by: model.vendor,
+      display_name: model.name,
+    })
+  } catch (error) {
+    return await forwardError(c, error)
+  }
+})
