@@ -1,6 +1,7 @@
 import { test, expect, mock } from "bun:test"
 
 import type { ChatCompletionsPayload } from "../src/services/copilot/create-chat-completions"
+import type { Model } from "../src/services/copilot/get-models"
 
 import { state } from "../src/lib/state"
 import { createChatCompletions } from "../src/services/copilot/create-chat-completions"
@@ -29,6 +30,24 @@ const fetchMock = mock(
 )
 // @ts-expect-error - Mock fetch doesn't implement all fetch properties
 ;(globalThis as unknown as { fetch: typeof fetch }).fetch = fetchMock
+
+function createModel(id: string): Model {
+  return {
+    capabilities: {
+      family: id,
+      object: "model_capabilities",
+      tokenizer: "cl100k_base",
+      type: "chat",
+    },
+    id,
+    model_picker_enabled: true,
+    name: id,
+    object: "model",
+    preview: false,
+    vendor: "openai",
+    version: "1",
+  }
+}
 
 test("sets X-Initiator to agent if tool/assistant present", async () => {
   const payload: ChatCompletionsPayload = {
@@ -129,4 +148,146 @@ test("falls back to string content for fully unsupported parts", async () => {
       },
     ]),
   )
+})
+
+test("falls back to lower claude-opus tier before other families", async () => {
+  const previousFetch = (globalThis as unknown as { fetch: typeof fetch }).fetch
+  const calledModels: Array<string> = []
+  let requestCount = 0
+
+  const fallbackFetchMock = mock(
+    (
+      _url: string,
+      opts: {
+        body?: string
+      },
+    ) => {
+      const requestBody = JSON.parse(opts.body ?? "{}") as { model?: string }
+      calledModels.push(requestBody.model ?? "")
+
+      if (requestCount === 0) {
+        requestCount++
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "unsupported_api_for_model",
+              message:
+                "The /chat/completions endpoint is not supported for this model",
+            },
+          }),
+          {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          choices: [],
+          id: "fallback-opus",
+          model: requestBody.model,
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    },
+  )
+
+  // @ts-expect-error - Mock fetch doesn't implement all fetch properties
+  ;(globalThis as unknown as { fetch: typeof fetch }).fetch = fallbackFetchMock
+  state.models = {
+    data: [
+      createModel("claude-opus-4.6"),
+      createModel("claude-opus-4.5"),
+      createModel("claude-sonnet-4.5"),
+    ],
+    object: "list",
+  }
+
+  try {
+    const result = await createChatCompletions({
+      messages: [{ role: "user", content: "hi" }],
+      model: "claude-opus-4.6",
+    })
+
+    expect(calledModels).toEqual(["claude-opus-4.6", "claude-opus-4.5"])
+    expect((result as { model?: string }).model).toBe("claude-opus-4.5")
+  } finally {
+    ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
+  }
+})
+
+test("falls back to lower claude-sonnet tier before other families", async () => {
+  const previousFetch = (globalThis as unknown as { fetch: typeof fetch }).fetch
+  const calledModels: Array<string> = []
+  let requestCount = 0
+
+  const fallbackFetchMock = mock(
+    (
+      _url: string,
+      opts: {
+        body?: string
+      },
+    ) => {
+      const requestBody = JSON.parse(opts.body ?? "{}") as { model?: string }
+      calledModels.push(requestBody.model ?? "")
+
+      if (requestCount === 0) {
+        requestCount++
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "unsupported_api_for_model",
+              message:
+                "The /chat/completions endpoint is not supported for this model",
+            },
+          }),
+          {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          },
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          choices: [],
+          id: "fallback-sonnet",
+          model: requestBody.model,
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    },
+  )
+
+  // @ts-expect-error - Mock fetch doesn't implement all fetch properties
+  ;(globalThis as unknown as { fetch: typeof fetch }).fetch = fallbackFetchMock
+  state.models = {
+    data: [
+      createModel("claude-sonnet-4.5"),
+      createModel("claude-sonnet-4"),
+      createModel("claude-opus-4.5"),
+    ],
+    object: "list",
+  }
+
+  try {
+    const result = await createChatCompletions({
+      messages: [{ role: "user", content: "hi" }],
+      model: "claude-sonnet-4.5",
+    })
+
+    expect(calledModels).toEqual(["claude-sonnet-4.5", "claude-sonnet-4"])
+    expect((result as { model?: string }).model).toBe("claude-sonnet-4")
+  } finally {
+    ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
+  }
 })

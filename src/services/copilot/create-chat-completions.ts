@@ -251,6 +251,91 @@ function getSharedPrefixLength(left: string, right: string): number {
   return index
 }
 
+type TierModelFamily = "gpt" | "claude-opus" | "claude-sonnet"
+
+interface ParsedTierModel {
+  codex: boolean
+  family: TierModelFamily
+  major: number
+  minor: number
+}
+
+function parseTierModel(modelId: string): ParsedTierModel | null {
+  const gptMatch = /^gpt-(\d+)(?:\.(\d+))?(-codex)?$/.exec(modelId)
+  if (gptMatch) {
+    const minorVersion = gptMatch[2] || "0"
+    return {
+      codex: Boolean(gptMatch[3]),
+      family: "gpt",
+      major: Number.parseInt(gptMatch[1], 10),
+      minor: Number.parseInt(minorVersion, 10),
+    }
+  }
+
+  const claudeMatch =
+    /^(claude-(?:opus|sonnet))-(\d+)(?:[.-](\d+))?(?:-\d{8})?$/.exec(modelId)
+  if (claudeMatch) {
+    const minorVersion = claudeMatch[3] || "0"
+    return {
+      codex: false,
+      family: claudeMatch[1] as TierModelFamily,
+      major: Number.parseInt(claudeMatch[2], 10),
+      minor: Number.parseInt(minorVersion, 10),
+    }
+  }
+
+  return null
+}
+
+function compareTierModel(
+  left: Pick<ParsedTierModel, "major" | "minor">,
+  right: Pick<ParsedTierModel, "major" | "minor">,
+): number {
+  if (left.major !== right.major) {
+    return left.major - right.major
+  }
+  return left.minor - right.minor
+}
+
+function getLowerTierCandidates(
+  requestedModelId: string,
+  compatibleModels: Array<Model>,
+): Array<string> {
+  const requestedModel = parseTierModel(requestedModelId)
+  if (!requestedModel) {
+    return []
+  }
+
+  const candidates: Array<{
+    id: string
+    parsed: ParsedTierModel
+  }> = []
+
+  for (const model of compatibleModels) {
+    const parsed = parseTierModel(model.id)
+    if (!parsed || parsed.family !== requestedModel.family) {
+      continue
+    }
+
+    if (
+      requestedModel.family === "gpt"
+      && parsed.codex !== requestedModel.codex
+    ) {
+      continue
+    }
+
+    if (compareTierModel(parsed, requestedModel) < 0) {
+      candidates.push({
+        id: model.id,
+        parsed,
+      })
+    }
+  }
+
+  candidates.sort((left, right) => compareTierModel(right.parsed, left.parsed))
+  return candidates.map((candidate) => candidate.id)
+}
+
 function getModelVariants(modelId: string): Array<string> {
   const variants = new Set<string>()
 
@@ -326,6 +411,15 @@ function findChatCompletionsCompatibleFallback(modelId: string): string | null {
   const compatibleModelMap = new Map(
     compatibleModels.map((model) => [model.id, model]),
   )
+
+  for (const lowerTierCandidate of getLowerTierCandidates(
+    modelId,
+    compatibleModels,
+  )) {
+    if (compatibleModelMap.has(lowerTierCandidate)) {
+      return lowerTierCandidate
+    }
+  }
 
   for (const variant of getModelVariants(modelId)) {
     if (compatibleModelMap.has(variant)) {
