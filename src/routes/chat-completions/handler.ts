@@ -27,6 +27,7 @@ import {
   type ChatCompletionChunk,
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
+  type Message,
 } from "~/services/copilot/create-chat-completions"
 
 interface StreamUsageChunk {
@@ -598,6 +599,98 @@ function applyMaxTokensIfNeeded(
   return payload
 }
 
+function isSystemOrDeveloper(msg: Message): boolean {
+  return msg.role === "system" || msg.role === "developer"
+}
+
+/**
+ * Remove the oldest non-system message from the list, along with any
+ * orphaned tool response messages if the removed message was an assistant
+ * message with tool_calls.
+ */
+function removeOldestWithToolCleanup(messages: Array<Message>): Array<Message> {
+  const [removed, ...rest] = messages
+  if (removed.role !== "assistant" || !removed.tool_calls?.length) {
+    return rest
+  }
+
+  // Remove tool responses that belong to the removed assistant's tool_calls
+  const toolCallIds = new Set(removed.tool_calls.map((tc) => tc.id))
+  const firstNonTool = rest.findIndex(
+    (msg) =>
+      msg.role !== "tool"
+      || !msg.tool_call_id
+      || !toolCallIds.has(msg.tool_call_id),
+  )
+  return firstNonTool === -1 ? [] : rest.slice(firstNonTool)
+}
+
+async function computeInputTokens(
+  payload: ChatCompletionsPayload,
+  model: import("~/services/copilot/get-models").Model,
+): Promise<number | null> {
+  try {
+    const count = await getTokenCount(payload, model)
+    return count.input
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Truncate conversation messages when total token count exceeds the model's
+ * max_prompt_tokens limit. Preserves system/developer messages and the most
+ * recent messages, removing oldest non-system messages first.
+ */
+async function truncateMessages(
+  payload: ChatCompletionsPayload,
+): Promise<ChatCompletionsPayload> {
+  const selectedModel = state.models?.data.find((m) => m.id === payload.model)
+  if (!selectedModel) return payload
+
+  const maxPromptTokens = selectedModel.capabilities.limits?.max_prompt_tokens
+  if (!maxPromptTokens) return payload
+
+  const initialInput = await computeInputTokens(payload, selectedModel)
+  if (initialInput === null || initialInput <= maxPromptTokens) return payload
+
+  const systemMessages = payload.messages.filter((m) => isSystemOrDeveloper(m))
+  let nonSystemMessages = payload.messages.filter(
+    (m) => !isSystemOrDeveloper(m),
+  )
+
+  const originalCount = nonSystemMessages.length
+  let currentInput = initialInput
+
+  // Iteratively remove the oldest non-system messages until under limit
+  // Keep at least the last 2 messages for context
+  while (currentInput > maxPromptTokens && nonSystemMessages.length > 2) {
+    nonSystemMessages = removeOldestWithToolCleanup(nonSystemMessages)
+
+    const truncatedPayload = {
+      ...payload,
+      messages: [...systemMessages, ...nonSystemMessages],
+    }
+    const newInput = await computeInputTokens(truncatedPayload, selectedModel)
+    if (newInput === null) break
+    currentInput = newInput
+  }
+
+  const removedCount = originalCount - nonSystemMessages.length
+  if (removedCount > 0) {
+    consola.warn(
+      `Truncated ${removedCount} messages to fit within ${maxPromptTokens} prompt token limit (${initialInput} → ${currentInput} tokens)`,
+    )
+    logEmitter.log(
+      "warn",
+      `Truncated ${removedCount} messages: ${initialInput} → ${currentInput} tokens (limit: ${maxPromptTokens})`,
+    )
+    return { ...payload, messages: [...systemMessages, ...nonSystemMessages] }
+  }
+
+  return payload
+}
+
 function createQueueFullResponse(c: Context): Response {
   return c.json(
     {
@@ -636,10 +729,12 @@ export async function handleCompletion(c: Context) {
   const rawPayload = await c.req.json<ChatCompletionsPayload>()
   consola.debug("Request payload:", JSON.stringify(rawPayload).slice(-400))
 
-  const payload = applyMaxTokensIfNeeded(
-    preparePayload(
-      normalizeTools(
-        denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
+  const payload = await truncateMessages(
+    applyMaxTokensIfNeeded(
+      preparePayload(
+        normalizeTools(
+          denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
+        ),
       ),
     ),
   )
