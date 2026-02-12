@@ -129,11 +129,39 @@ function normalizeContentPart(part: unknown): ContentPart | null {
   return toTextPart(part) ?? toImageUrlPart(part)
 }
 
-function normalizeMessageContent(
-  content: Message["content"],
-): Message["content"] {
-  if (!Array.isArray(content)) {
+function serializeUnknownContent(content: unknown): string {
+  if (typeof content === "string") {
     return content
+  }
+
+  if (
+    typeof content === "number"
+    || typeof content === "boolean"
+    || typeof content === "bigint"
+  ) {
+    return String(content)
+  }
+
+  if (content === null) {
+    return "null"
+  }
+
+  try {
+    return JSON.stringify(content)
+  } catch {
+    // Ignore serialization errors and fall back to empty string.
+  }
+
+  return ""
+}
+
+function normalizeMessageContent(content: unknown): Message["content"] {
+  if (content === null || typeof content === "string") {
+    return content
+  }
+
+  if (!Array.isArray(content)) {
+    return serializeUnknownContent(content)
   }
 
   const normalizedContent = content
@@ -147,6 +175,25 @@ function normalizeMessageContent(
   return normalizedContent
 }
 
+function normalizeToolMessageContent(content: Message["content"]): string {
+  if (typeof content === "string") {
+    return content
+  }
+
+  if (content === null) {
+    return ""
+  }
+
+  const textParts = content.filter(
+    (part): part is TextPart => part.type === "text",
+  )
+  if (textParts.length === content.length) {
+    return textParts.map((part) => part.text).join("\n\n")
+  }
+
+  return JSON.stringify(content)
+}
+
 function normalizePayloadContent(
   payload: ChatCompletionsPayload,
 ): ChatCompletionsPayload {
@@ -154,7 +201,10 @@ function normalizePayloadContent(
     ...payload,
     messages: payload.messages.map((message) => ({
       ...message,
-      content: normalizeMessageContent(message.content),
+      content:
+        message.role === "tool" ?
+          normalizeToolMessageContent(normalizeMessageContent(message.content))
+        : normalizeMessageContent(message.content),
     })),
   }
 }
@@ -534,11 +584,11 @@ export const createChatCompletions = async (
       && x.content?.some((x) => x.type === "image_url"),
   )
 
-  // Agent/user check for X-Initiator header
-  // Determine if any message is from an agent ("assistant" or "tool")
-  const isAgentCall = normalizedPayload.messages.some((msg) =>
-    ["assistant", "tool"].includes(msg.role),
-  )
+  // Agent/user check for X-Initiator header.
+  // Only the latest turn should decide initiator type.
+  const lastMessage = normalizedPayload.messages.at(-1)
+  const isAgentCall =
+    lastMessage?.role === "assistant" || lastMessage?.role === "tool"
 
   // Build headers and add X-Initiator
   const headers: Record<string, string> = {

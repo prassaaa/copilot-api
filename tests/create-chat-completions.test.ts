@@ -291,3 +291,165 @@ test("falls back to lower claude-sonnet tier before other families", async () =>
     ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
   }
 })
+
+test("sets X-Initiator to user when latest turn is user", async () => {
+  const previousFetch = (globalThis as unknown as { fetch: typeof fetch }).fetch
+
+  const initiatorFetchMock = mock(
+    (
+      _url: string,
+      _opts: {
+        headers: Record<string, string>
+      },
+    ) =>
+      new Response(
+        JSON.stringify({
+          choices: [],
+          id: "initiator-check",
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+  )
+
+  // @ts-expect-error - Mock fetch doesn't implement all fetch properties
+  ;(globalThis as unknown as { fetch: typeof fetch }).fetch = initiatorFetchMock
+
+  try {
+    await createChatCompletions({
+      messages: [
+        { role: "assistant", content: "Previous assistant output" },
+        {
+          role: "tool",
+          tool_call_id: "tool_1",
+          content: "Previous tool output",
+        },
+        { role: "user", content: "Please continue from this state." },
+      ],
+      model: "gpt-test",
+    })
+
+    const headers = (
+      initiatorFetchMock.mock.calls[0][1] as { headers: Record<string, string> }
+    ).headers
+    expect(headers["X-Initiator"]).toBe("user")
+  } finally {
+    ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
+  }
+})
+
+test("normalizes tool message content to string", async () => {
+  const fetchHost = globalThis as unknown as { fetch: typeof fetch }
+  const previousFetch = fetchHost.fetch
+  let capturedBody = ""
+
+  const toolContentFetchMock = mock(
+    (
+      _url: string,
+      opts: {
+        body?: string
+      },
+    ) => {
+      capturedBody = opts.body ?? ""
+
+      return new Response(
+        JSON.stringify({
+          choices: [],
+          id: "tool-content-check",
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    },
+  )
+
+  fetchHost.fetch = toolContentFetchMock
+
+  try {
+    await createChatCompletions({
+      messages: [
+        { role: "user", content: "Run tool." },
+        {
+          role: "tool",
+          tool_call_id: "tool_2",
+          content: [
+            { type: "text", text: "line-one" },
+            { type: "text", text: "line-two" },
+          ],
+        },
+      ],
+      model: "gpt-test",
+    })
+
+    const parsed = JSON.parse(capturedBody) as ChatCompletionsPayload
+    const toolMessage = parsed.messages.find(
+      (message) => message.role === "tool",
+    )
+    expect(typeof toolMessage?.content).toBe("string")
+    expect(toolMessage?.content).toBe("line-one\n\nline-two")
+  } finally {
+    fetchHost.fetch = previousFetch
+  }
+})
+
+test("normalizes object tool message content to JSON string", async () => {
+  const fetchHost = globalThis as unknown as { fetch: typeof fetch }
+  const previousFetch = fetchHost.fetch
+  let capturedBody = ""
+
+  const toolObjectFetchMock = mock(
+    (
+      _url: string,
+      opts: {
+        body?: string
+      },
+    ) => {
+      capturedBody = opts.body ?? ""
+
+      return new Response(
+        JSON.stringify({
+          choices: [],
+          id: "tool-object-check",
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    },
+  )
+
+  fetchHost.fetch = toolObjectFetchMock
+
+  try {
+    await createChatCompletions({
+      messages: [
+        { role: "user", content: "Run tool." },
+        {
+          role: "tool",
+          tool_call_id: "tool_3",
+          content: {
+            status: "ok",
+            updated_lines: 3,
+          } as unknown as ChatCompletionsPayload["messages"][number]["content"],
+        },
+      ],
+      model: "gpt-test",
+    })
+
+    const parsed = JSON.parse(capturedBody) as ChatCompletionsPayload
+    const toolMessage = parsed.messages.find(
+      (message) => message.role === "tool",
+    )
+    expect(toolMessage?.content).toBe('{"status":"ok","updated_lines":3}')
+  } finally {
+    fetchHost.fetch = previousFetch
+  }
+})
