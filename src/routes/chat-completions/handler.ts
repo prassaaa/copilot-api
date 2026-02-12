@@ -24,6 +24,7 @@ import { usageStats } from "~/lib/usage-stats"
 import { isNullish, sanitizeBillingHeader } from "~/lib/utils"
 import {
   createChatCompletions,
+  type ChatCompletionChunk,
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
@@ -47,6 +48,87 @@ interface HistoryEntryParams {
   cost: number
   status: "success" | "error" | "cached"
   error?: string
+}
+
+function normalizeToolCallId(id: string): string {
+  if (id.startsWith("call_")) {
+    return id
+  }
+
+  const safe = id.replaceAll(/[^\w-]/g, "_")
+  return `call_${safe}`
+}
+
+function normalizeResponseToolCallIds(
+  response: ChatCompletionResponse,
+): ChatCompletionResponse {
+  const normalizedChoices = response.choices.map((choice) => {
+    const toolCalls = choice.message.tool_calls
+    if (!toolCalls || toolCalls.length === 0) {
+      return choice
+    }
+
+    return {
+      ...choice,
+      message: {
+        ...choice.message,
+        tool_calls: toolCalls.map((toolCall) => ({
+          ...toolCall,
+          id: normalizeToolCallId(toolCall.id),
+        })),
+      },
+    }
+  })
+
+  return {
+    ...response,
+    choices: normalizedChoices,
+  }
+}
+
+function hasToolCallResponse(response: ChatCompletionResponse): boolean {
+  return response.choices.some(
+    (choice) => (choice.message.tool_calls?.length ?? 0) > 0,
+  )
+}
+
+interface NormalizedStreamChunk {
+  completionTokens: number | null
+  data: string
+}
+
+function normalizeStreamChunkData(data: string): NormalizedStreamChunk {
+  if (!data || data === "[DONE]") {
+    return { completionTokens: null, data }
+  }
+
+  try {
+    const parsed = JSON.parse(data) as ChatCompletionChunk
+    for (const choice of parsed.choices) {
+      if (!choice.delta.tool_calls) {
+        continue
+      }
+
+      for (const toolCall of choice.delta.tool_calls) {
+        if (!toolCall.id) {
+          continue
+        }
+
+        const normalizedId = normalizeToolCallId(toolCall.id)
+        toolCall.id = normalizedId
+      }
+    }
+
+    return {
+      completionTokens: parsed.usage?.completion_tokens ?? null,
+      data: JSON.stringify(parsed),
+    }
+  } catch {
+    return {
+      completionTokens: tryParseStreamUsage(data),
+      data,
+    }
+  }
 }
 
 function getCacheKeyOptions(payload: ChatCompletionsPayload) {
@@ -88,7 +170,7 @@ function handleCachedResponse(
   c: Context,
   ctx: CompletionContext,
 ): Response | null {
-  if (ctx.payload.stream) return null
+  if (ctx.payload.stream || (ctx.payload.tools?.length ?? 0) > 0) return null
 
   const cacheKey = generateCacheKey(ctx.payload.model, ctx.payload.messages, {
     ...getCacheKeyOptions(ctx.payload),
@@ -104,13 +186,17 @@ function handleCachedResponse(
     `Chat completion (cached): model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
   )
 
+  const cachedResponse = normalizeResponseToolCallIds(
+    cached.response as ChatCompletionResponse,
+  )
+
   recordHistoryEntry({
     ctx,
     outputTokens: cached.outputTokens,
     cost: 0,
     status: "cached",
   })
-  return c.json(cached.response)
+  return c.json(cachedResponse)
 }
 
 async function handleQueueEnqueue(): Promise<string | undefined> {
@@ -132,13 +218,14 @@ function handleNonStreamingResponse(
   ctx: CompletionContext,
   response: ChatCompletionResponse,
 ): Response {
-  consola.debug("Non-streaming response:", JSON.stringify(response))
+  const normalizedResponse = normalizeResponseToolCallIds(response)
+  consola.debug("Non-streaming response:", JSON.stringify(normalizedResponse))
 
   let outputTokens = 0
   let finalInputTokens = ctx.inputTokens
-  if (response.usage) {
-    outputTokens = response.usage.completion_tokens || 0
-    finalInputTokens = response.usage.prompt_tokens || ctx.inputTokens
+  if (normalizedResponse.usage) {
+    outputTokens = normalizedResponse.usage.completion_tokens || 0
+    finalInputTokens = normalizedResponse.usage.prompt_tokens || ctx.inputTokens
   }
 
   const cost = costCalculator.record(
@@ -148,17 +235,22 @@ function handleNonStreamingResponse(
   )
   consola.debug(`Cost estimate: $${cost.totalCost.toFixed(6)}`)
 
-  const cacheKey = generateCacheKey(ctx.payload.model, ctx.payload.messages, {
-    ...getCacheKeyOptions(ctx.payload),
-    accountId: ctx.accountInfo ?? undefined,
-  })
-  requestCache.set({
-    key: cacheKey,
-    response,
-    model: ctx.payload.model,
-    inputTokens: finalInputTokens,
-    outputTokens,
-  })
+  const shouldCacheResponse =
+    (ctx.payload.tools?.length ?? 0) === 0
+    && !hasToolCallResponse(normalizedResponse)
+  if (shouldCacheResponse) {
+    const cacheKey = generateCacheKey(ctx.payload.model, ctx.payload.messages, {
+      ...getCacheKeyOptions(ctx.payload),
+      accountId: ctx.accountInfo ?? undefined,
+    })
+    requestCache.set({
+      key: cacheKey,
+      response: normalizedResponse,
+      model: ctx.payload.model,
+      inputTokens: finalInputTokens,
+      outputTokens,
+    })
+  }
 
   recordHistoryEntry({
     ctx: { ...ctx, inputTokens: finalInputTokens },
@@ -171,7 +263,7 @@ function handleNonStreamingResponse(
     "success",
     `Chat completion done: model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
   )
-  return c.json(response)
+  return c.json(normalizedResponse)
 }
 
 function tryParseStreamUsage(data: string): number | null {
@@ -186,6 +278,7 @@ function tryParseStreamUsage(data: string): number | null {
 function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
   consola.debug("Streaming response")
   return streamSSE(c, async (stream) => {
+    let doneSent = false
     let streamOutputTokens = 0
 
     try {
@@ -202,26 +295,34 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
         consola.debug("Streaming chunk:", JSON.stringify(chunk))
 
         if (chunk.event === "ping") {
-          await stream.writeSSE({
-            event: "ping",
-            data: '{"type":"ping"}',
-          })
+          // Ignore ping events for OpenAI compatibility.
           continue
         }
 
+        const normalizedChunk = normalizeStreamChunkData(chunk.data ?? "")
+
+        if (normalizedChunk.data === "[DONE]") {
+          doneSent = true
+        }
+
         const sseMessage: SSEMessage = {
-          data: chunk.data ?? "",
+          data: normalizedChunk.data,
           event: chunk.event,
           id: typeof chunk.id === "string" ? chunk.id : undefined,
         }
         await stream.writeSSE(sseMessage)
 
-        if (chunk.data && chunk.data !== "[DONE]") {
-          const tokens = tryParseStreamUsage(chunk.data)
-          if (tokens !== null) {
-            streamOutputTokens = tokens
-          }
+        if (normalizedChunk.completionTokens !== null) {
+          streamOutputTokens = normalizedChunk.completionTokens
         }
+
+        if (doneSent) {
+          break
+        }
+      }
+
+      if (!doneSent) {
+        await stream.writeSSE({ data: "[DONE]" })
       }
 
       const finalOutputTokens =
