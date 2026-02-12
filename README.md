@@ -15,21 +15,28 @@
 ## Screenshots
 
 ### Dashboard
-<!-- Add your screenshot here -->
 ![Dashboard](screenshots/dashboard.png)
 
-### Authentication Flow
-<!-- Add your screenshot here -->
-![Authentication](screenshots/auth.png)
+### Available Models
+![Available Models](screenshots/models.png)
 
-### Usage Statistics
-<!-- Add your screenshot here -->
-![Usage Statistics](screenshots/usage.png)
+### Usage & Quotas 
+![Usage & Quotas](screenshots/usage.png)
 
-### History
-<!-- Add your screenshot here -->
-![History](screenshots/history.png)
+### Manage Accounts
+![Manage Accounts](screenshots/accounts.png)
 
+### Server Logs
+![Server Logs](screenshots/logs.png)
+
+### Settings Control
+![Settings Control](screenshots/settings.png)
+
+### Request History
+![Request History](screenshots/history.png)
+
+### API Playground
+![API Playground](screenshots/playground.png)
 ---
 
 ## Overview
