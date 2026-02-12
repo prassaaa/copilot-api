@@ -292,31 +292,6 @@
         <!-- Sidebar -->
         <aside class="w-72 border-r border-space-border bg-space-900/45 backdrop-blur-md flex flex-col p-4 gap-4 flex-shrink-0 overflow-hidden">
 
-            <div class="rounded-2xl border border-space-border/70 bg-space-950/75 p-4">
-                <div class="flex items-center justify-between gap-2 mb-3">
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">Workspace</p>
-                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] border"
-                          :class="status.connected ? 'border-neon-green/30 bg-neon-green/10 text-neon-green' : 'border-red-500/30 bg-red-500/10 text-red-400'">
-                        <span class="w-1.5 h-1.5 rounded-full" :class="status.connected ? 'bg-neon-green' : 'bg-red-400'"></span>
-                        <span x-text="status.connected ? 'Live' : 'Down'"></span>
-                    </span>
-                </div>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div class="rounded-lg border border-space-border/60 bg-space-900/70 px-2 py-2">
-                        <p class="text-[10px] text-gray-500 uppercase">Models</p>
-                        <p class="text-sm font-semibold text-white" x-text="models.length"></p>
-                    </div>
-                    <div class="rounded-lg border border-space-border/60 bg-space-900/70 px-2 py-2">
-                        <p class="text-[10px] text-gray-500 uppercase">Accounts</p>
-                        <p class="text-sm font-semibold text-neon-purple" x-text="accountPool.configuredCount || accountPool.accounts.length"></p>
-                    </div>
-                    <div class="rounded-lg border border-space-border/60 bg-space-900/70 px-2 py-2">
-                        <p class="text-[10px] text-gray-500 uppercase">Req 24h</p>
-                        <p class="text-sm font-semibold text-neon-cyan" x-text="usageStats.totalRequests || 0"></p>
-                    </div>
-                </div>
-            </div>
-
             <div class="flex-1 overflow-y-auto pr-1 space-y-4">
                 <div>
                     <div class="px-1 mb-2 text-[11px] font-bold text-gray-600 uppercase tracking-widest">Main</div>
