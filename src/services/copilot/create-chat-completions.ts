@@ -1,6 +1,8 @@
 import consola from "consola"
 import { events } from "fetch-event-stream"
 
+import type { Model } from "~/services/copilot/get-models"
+
 import {
   getCurrentAccount,
   isPoolEnabledSync,
@@ -15,6 +17,7 @@ import { getActiveCopilotToken } from "~/lib/token"
 
 // Timeout for chat completions (2 minutes for long streaming responses)
 const CHAT_COMPLETION_TIMEOUT = 120000
+const CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
 type CopilotErrorBody = { error?: { code?: string; message?: string } }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -221,6 +224,128 @@ async function parseCopilotErrorBody(
   return null
 }
 
+function isUnsupportedApiForModelError(
+  errorBody: CopilotErrorBody | null,
+): boolean {
+  const code = extractErrorCode(errorBody)
+  const message = extractErrorMessage(errorBody)
+  return (
+    code === "unsupported_api_for_model"
+    && message.includes(`${CHAT_COMPLETIONS_ENDPOINT} endpoint`)
+  )
+}
+
+function supportsChatCompletionsEndpoint(model: Model): boolean {
+  if (!model.supported_endpoints || model.supported_endpoints.length === 0) {
+    return true
+  }
+  return model.supported_endpoints.includes(CHAT_COMPLETIONS_ENDPOINT)
+}
+
+function getSharedPrefixLength(left: string, right: string): number {
+  const minLength = Math.min(left.length, right.length)
+  let index = 0
+  while (index < minLength && left[index] === right[index]) {
+    index++
+  }
+  return index
+}
+
+function getModelVariants(modelId: string): Array<string> {
+  const variants = new Set<string>()
+
+  const withoutCodex = modelId.replace(/-codex$/, "")
+  if (withoutCodex !== modelId) {
+    variants.add(withoutCodex)
+  }
+
+  const condensedCodex = modelId.replace(/\.\d+-codex$/, "-codex")
+  if (condensedCodex !== modelId) {
+    variants.add(condensedCodex)
+  }
+
+  const withoutMinorVersion = modelId.replaceAll(/\.\d+(?=-|$)/g, "")
+  if (withoutMinorVersion !== modelId) {
+    variants.add(withoutMinorVersion)
+  }
+
+  const withoutDatedSuffix = modelId.replace(/-\d{8}$/, "")
+  if (withoutDatedSuffix !== modelId) {
+    variants.add(withoutDatedSuffix)
+  }
+
+  variants.delete(modelId)
+  return [...variants]
+}
+
+function scoreFallbackCandidate(
+  requestedModelId: string,
+  requestedModel: Model | undefined,
+  candidateModel: Model,
+): number {
+  let score = 0
+
+  if (requestedModel && candidateModel.vendor === requestedModel.vendor) {
+    score += 50
+  }
+
+  if (
+    requestedModel
+    && candidateModel.capabilities.family === requestedModel.capabilities.family
+  ) {
+    score += 80
+  }
+
+  if (
+    requestedModelId.includes("codex") === candidateModel.id.includes("codex")
+  ) {
+    score += 15
+  }
+
+  score += Math.min(
+    getSharedPrefixLength(requestedModelId, candidateModel.id),
+    40,
+  )
+
+  if (!candidateModel.preview) {
+    score += 5
+  }
+
+  return score
+}
+
+function findChatCompletionsCompatibleFallback(modelId: string): string | null {
+  const allModels = state.models?.data ?? []
+  const compatibleModels = allModels.filter(
+    (model) => model.id !== modelId && supportsChatCompletionsEndpoint(model),
+  )
+  if (compatibleModels.length === 0) {
+    return null
+  }
+
+  const compatibleModelMap = new Map(
+    compatibleModels.map((model) => [model.id, model]),
+  )
+
+  for (const variant of getModelVariants(modelId)) {
+    if (compatibleModelMap.has(variant)) {
+      return variant
+    }
+  }
+
+  const requestedModel = allModels.find((model) => model.id === modelId)
+  compatibleModels.sort((left, right) => {
+    const rightScore = scoreFallbackCandidate(modelId, requestedModel, right)
+    const leftScore = scoreFallbackCandidate(modelId, requestedModel, left)
+    if (rightScore !== leftScore) {
+      return rightScore - leftScore
+    }
+    return left.id.localeCompare(right.id)
+  })
+
+  return compatibleModels[0]?.id ?? null
+}
+
 function reportPoolError(
   response: Response,
   errorBody: CopilotErrorBody | null,
@@ -291,6 +416,16 @@ async function handleFailedCompletion(params: {
   throw new HTTPError("Failed to create chat completions", response)
 }
 
+async function parseSuccessfulCompletion(
+  response: Response,
+  stream: boolean | null | undefined,
+): Promise<ChatCompletionResponse | ReturnType<typeof events>> {
+  if (stream) {
+    return events(response)
+  }
+  return (await response.json()) as ChatCompletionResponse
+}
+
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
 ) => {
@@ -317,28 +452,49 @@ export const createChatCompletions = async (
     "X-Initiator": isAgentCall ? "agent" : "user",
   }
 
-  const response = await fetchWithTimeout(
-    `${copilotBaseUrl(state)}/chat/completions`,
-    {
+  const sendRequest = (requestPayload: ChatCompletionsPayload) =>
+    fetchWithTimeout(`${copilotBaseUrl(state)}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(normalizedPayload),
+      body: JSON.stringify(requestPayload),
       timeout: CHAT_COMPLETION_TIMEOUT,
-    },
-  )
+    })
+
+  const response = await sendRequest(normalizedPayload)
 
   if (!response.ok) {
+    const errorBody = await parseCopilotErrorBody(response)
+    const fallbackModel =
+      isUnsupportedApiForModelError(errorBody) ?
+        findChatCompletionsCompatibleFallback(normalizedPayload.model)
+      : null
+
+    if (fallbackModel) {
+      const fallbackPayload = { ...normalizedPayload, model: fallbackModel }
+      const message =
+        `Model "${normalizedPayload.model}" is not compatible with `
+        + `${CHAT_COMPLETIONS_ENDPOINT}; retrying with "${fallbackModel}".`
+      consola.warn(message)
+      logEmitter.log("warn", message)
+
+      const fallbackResponse = await sendRequest(fallbackPayload)
+      if (!fallbackResponse.ok) {
+        return handleFailedCompletion({
+          response: fallbackResponse,
+          payload: fallbackPayload,
+        })
+      }
+
+      return parseSuccessfulCompletion(fallbackResponse, fallbackPayload.stream)
+    }
+
     return handleFailedCompletion({
       response,
       payload: normalizedPayload,
     })
   }
 
-  if (normalizedPayload.stream) {
-    return events(response)
-  }
-
-  return (await response.json()) as ChatCompletionResponse
+  return parseSuccessfulCompletion(response, normalizedPayload.stream)
 }
 
 // Streaming types
