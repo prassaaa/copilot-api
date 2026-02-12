@@ -15,6 +15,7 @@ const DEFAULT_CONFIG = {
   // Server settings
   port: 4141,
   debug: false,
+  apiKeys: [] as Array<string>,
 
   // WebUI settings
   webuiPassword: "",
@@ -166,10 +167,10 @@ export async function saveConfig(updates: Partial<Config>): Promise<void> {
 /**
  * Get current configuration (public, without sensitive data)
  */
-export function getPublicConfig(): Omit<Config, "webuiPassword"> & {
+export function getPublicConfig(): Omit<Config, "webuiPassword" | "apiKeys"> & {
   webuiPasswordSet: boolean
 } {
-  const { webuiPassword, ...publicConfig } = config
+  const { webuiPassword, apiKeys: _apiKeys, ...publicConfig } = config
   return {
     ...publicConfig,
     webuiPasswordSet: Boolean(webuiPassword),

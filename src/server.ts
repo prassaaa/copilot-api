@@ -3,6 +3,7 @@ import { serveStatic } from "hono/bun"
 import { cors } from "hono/cors"
 
 import { logEmitter } from "./lib/logger"
+import { createAuthMiddleware } from "./lib/request-auth"
 import { accountLimitsRoute } from "./routes/account-limits/route"
 import { completionRoutes } from "./routes/chat-completions/route"
 import { embeddingRoutes } from "./routes/embeddings/route"
@@ -56,6 +57,15 @@ server.use(async (c, next) => {
 })
 
 server.use(cors())
+
+const apiAuthMiddleware = createAuthMiddleware()
+server.use("/chat/*", apiAuthMiddleware)
+server.use("/models", apiAuthMiddleware)
+server.use("/embeddings", apiAuthMiddleware)
+server.use("/usage", apiAuthMiddleware)
+server.use("/token", apiAuthMiddleware)
+server.use("/account-limits", apiAuthMiddleware)
+server.use("/v1/*", apiAuthMiddleware)
 
 // Health check routes (no auth required)
 server.route("/health", healthRoutes)

@@ -90,10 +90,34 @@ function normalizeHttpError(errorText: string): {
   }
 }
 
+const FORWARDED_ERROR_HEADERS = new Set([
+  "retry-after",
+  "www-authenticate",
+  "x-request-id",
+  "x-github-request-id",
+])
+
+function shouldForwardErrorHeader(headerName: string): boolean {
+  const normalized = headerName.toLowerCase()
+  return (
+    FORWARDED_ERROR_HEADERS.has(normalized)
+    || normalized.startsWith("x-ratelimit-")
+  )
+}
+
+function forwardRelevantErrorHeaders(c: Context, response: Response): void {
+  for (const [key, value] of response.headers.entries()) {
+    if (shouldForwardErrorHeader(key)) {
+      c.header(key, value)
+    }
+  }
+}
+
 export async function forwardError(c: Context, error: unknown) {
   consola.error("Error occurred:", error)
 
   if (error instanceof HTTPError) {
+    forwardRelevantErrorHeaders(c, error.response)
     const errorText = await error.response.text()
     const normalized = normalizeHttpError(errorText)
     consola.error("HTTP error:", normalized)
