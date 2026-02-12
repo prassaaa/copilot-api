@@ -216,7 +216,7 @@ function handleStreamingResponse(params: {
   c: Context
   anthropicPayload: AnthropicMessagesPayload
   openAIPayload: OpenAIPayload
-  response: AsyncIterable<{ data?: string }>
+  response: AsyncIterable<{ data?: string; event?: string }>
   accountInfo?: string
   startTime: number
   tokenState: TokenState
@@ -243,6 +243,11 @@ function handleStreamingResponse(params: {
 
     for await (const rawEvent of response) {
       consola.debug("Copilot raw stream event:", JSON.stringify(rawEvent))
+      if (rawEvent.event === "ping") {
+        await stream.writeSSE({ event: "ping", data: '{"type":"ping"}' })
+        continue
+      }
+
       if (rawEvent.data === "[DONE]") {
         break
       }

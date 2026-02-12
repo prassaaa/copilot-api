@@ -200,6 +200,15 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
 
       for await (const chunk of response) {
         consola.debug("Streaming chunk:", JSON.stringify(chunk))
+
+        if (chunk.event === "ping") {
+          await stream.writeSSE({
+            event: "ping",
+            data: '{"type":"ping"}',
+          })
+          continue
+        }
+
         const sseMessage: SSEMessage = {
           data: chunk.data ?? "",
           event: chunk.event,
