@@ -59,6 +59,64 @@ function normalizeToolCallId(id: string): string {
   return `call_${safe}`
 }
 
+/**
+ * Reverse the normalizeToolCallId transformation on incoming request messages.
+ * When we add `call_` prefix to tool call IDs in responses, Cursor sends them
+ * back with that prefix. We need to strip it before forwarding to Copilot API
+ * so the IDs match what Copilot originally generated.
+ */
+function denormalizeToolCallId(id: string): string {
+  if (!id.startsWith("call_")) {
+    return id
+  }
+
+  // Strip the `call_` prefix we added
+  const inner = id.slice(5)
+
+  // Reverse the underscore-escaping: restore dots in IDs like "toolu_abc.123"
+  // But since we can't perfectly reverse arbitrary escaping, just return
+  // the inner part. The Copilot API generated the original ID without `call_`.
+  return inner
+}
+
+/**
+ * Denormalize tool call IDs in incoming request messages before sending
+ * to Copilot API. This reverses the normalization we apply to responses,
+ * ensuring round-trip consistency.
+ */
+function denormalizeRequestToolCallIds(
+  payload: ChatCompletionsPayload,
+): ChatCompletionsPayload {
+  const messages = payload.messages.map((msg) => {
+    // Denormalize tool_call_id in tool role messages
+    if (msg.role === "tool" && msg.tool_call_id) {
+      const denormalized = denormalizeToolCallId(msg.tool_call_id)
+      if (denormalized !== msg.tool_call_id) {
+        return { ...msg, tool_call_id: denormalized }
+      }
+    }
+
+    // Denormalize tool_calls[].id in assistant role messages
+    if (msg.role === "assistant" && msg.tool_calls?.length) {
+      const denormalizedCalls = msg.tool_calls.map((tc) => {
+        const denormalized = denormalizeToolCallId(tc.id)
+        return denormalized !== tc.id ? { ...tc, id: denormalized } : tc
+      })
+      const originalCalls = msg.tool_calls
+      const hasChanges = denormalizedCalls.some(
+        (tc, i) => tc !== originalCalls[i],
+      )
+      if (hasChanges) {
+        return { ...msg, tool_calls: denormalizedCalls }
+      }
+    }
+
+    return msg
+  })
+
+  return { ...payload, messages }
+}
+
 function normalizeResponseToolCallIds(
   response: ChatCompletionResponse,
 ): ChatCompletionResponse {
@@ -275,6 +333,51 @@ function tryParseStreamUsage(data: string): number | null {
   }
 }
 
+interface StreamState {
+  doneSent: boolean
+  outputTokens: number
+}
+
+async function processStreamChunks(
+  response: AsyncIterable<{ event?: string; data?: string; id?: unknown }>,
+  stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
+): Promise<StreamState> {
+  let doneSent = false
+  let outputTokens = 0
+
+  for await (const chunk of response) {
+    consola.debug("Streaming chunk:", JSON.stringify(chunk))
+
+    if (chunk.event === "ping") {
+      continue
+    }
+
+    const normalizedChunk = normalizeStreamChunkData(chunk.data ?? "")
+
+    if (normalizedChunk.data === "[DONE]") {
+      doneSent = true
+    }
+
+    // OpenAI SSE spec for chat completions does NOT use named events.
+    // Forwarding non-standard event names (e.g. from Copilot API) causes
+    // clients like Cursor to silently ignore all chunks.
+    await stream.writeSSE({
+      data: normalizedChunk.data,
+      id: typeof chunk.id === "string" ? chunk.id : undefined,
+    })
+
+    if (normalizedChunk.completionTokens !== null) {
+      outputTokens = normalizedChunk.completionTokens
+    }
+
+    if (doneSent) {
+      break
+    }
+  }
+
+  return { doneSent, outputTokens }
+}
+
 function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
   consola.debug("Streaming response")
   return streamSSE(c, async (stream) => {
@@ -286,40 +389,21 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
       usageStats.recordRequest(ctx.payload.model)
 
       if (isNonStreaming(response)) {
-        const data = JSON.stringify(response)
-        await stream.writeSSE({ data })
-        return
-      }
-
-      for await (const chunk of response) {
-        consola.debug("Streaming chunk:", JSON.stringify(chunk))
-
-        if (chunk.event === "ping") {
-          // Ignore ping events for OpenAI compatibility.
-          continue
-        }
-
-        const normalizedChunk = normalizeStreamChunkData(chunk.data ?? "")
-
-        if (normalizedChunk.data === "[DONE]") {
-          doneSent = true
-        }
-
-        const sseMessage: SSEMessage = {
-          data: normalizedChunk.data,
-          event: chunk.event,
-          id: typeof chunk.id === "string" ? chunk.id : undefined,
-        }
-        await stream.writeSSE(sseMessage)
-
+        // Convert non-streaming response to streaming chunk format
+        // so clients like Cursor can parse it correctly.
+        const chunk = convertToStreamChunk(response)
+        const normalizedChunk = normalizeStreamChunkData(JSON.stringify(chunk))
+        await stream.writeSSE({ data: normalizedChunk.data })
+        await stream.writeSSE({ data: "[DONE]" })
         if (normalizedChunk.completionTokens !== null) {
           streamOutputTokens = normalizedChunk.completionTokens
         }
-
-        if (doneSent) {
-          break
-        }
+        return
       }
+
+      const result = await processStreamChunks(response, stream)
+      doneSent = result.doneSent
+      streamOutputTokens = result.outputTokens
 
       if (!doneSent) {
         await stream.writeSSE({ data: "[DONE]" })
@@ -355,9 +439,8 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
         error: error instanceof Error ? error.message : String(error),
       })
 
-      // Send error event to client
+      // Send error as a regular data event (not named event) so clients can parse it
       await stream.writeSSE({
-        event: "error",
         data: JSON.stringify({
           error: {
             message:
@@ -366,6 +449,12 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
           },
         }),
       })
+
+      // Always send [DONE] to properly terminate the stream,
+      // otherwise clients like Cursor will hang waiting for it.
+      if (!doneSent) {
+        await stream.writeSSE({ data: "[DONE]" })
+      }
     }
   })
 }
@@ -548,7 +637,11 @@ export async function handleCompletion(c: Context) {
   consola.debug("Request payload:", JSON.stringify(rawPayload).slice(-400))
 
   const payload = applyMaxTokensIfNeeded(
-    preparePayload(normalizeTools(sanitizeMessages(rawPayload))),
+    preparePayload(
+      normalizeTools(
+        denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
+      ),
+    ),
   )
   const accountInfo =
     isPoolEnabledSync() ? (getCurrentAccount()?.login ?? null) : null
@@ -601,3 +694,45 @@ export async function handleCompletion(c: Context) {
 const isNonStreaming = (
   response: Awaited<ReturnType<typeof createChatCompletions>>,
 ): response is ChatCompletionResponse => Object.hasOwn(response, "choices")
+
+/**
+ * Convert a non-streaming ChatCompletionResponse to a streaming chunk format.
+ * This is needed when the client requests stream=true but the upstream API
+ * returns a non-streaming response. Clients like Cursor expect
+ * `chat.completion.chunk` objects with `delta` fields, not `message` fields.
+ */
+function convertToStreamChunk(
+  response: ChatCompletionResponse,
+): ChatCompletionChunk {
+  return {
+    id: response.id,
+    object: "chat.completion.chunk",
+    created: response.created,
+    model: response.model,
+    choices: response.choices.map((choice) => ({
+      index: choice.index,
+      delta: {
+        role: choice.message.role,
+        content: choice.message.content,
+        tool_calls: choice.message.tool_calls?.map((tc, index) => ({
+          index,
+          id: tc.id,
+          type: tc.type,
+          function: tc.function,
+        })),
+      },
+      finish_reason: choice.finish_reason,
+      logprobs: choice.logprobs,
+    })),
+    system_fingerprint: response.system_fingerprint,
+    usage:
+      response.usage ?
+        {
+          prompt_tokens: response.usage.prompt_tokens,
+          completion_tokens: response.usage.completion_tokens,
+          total_tokens: response.usage.total_tokens,
+          prompt_tokens_details: response.usage.prompt_tokens_details,
+        }
+      : undefined,
+  }
+}

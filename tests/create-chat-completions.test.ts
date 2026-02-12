@@ -369,7 +369,7 @@ test("normalizes tool message content to string", async () => {
     },
   )
 
-  fetchHost.fetch = toolContentFetchMock
+  fetchHost.fetch = toolContentFetchMock as unknown as typeof fetch
 
   try {
     await createChatCompletions({
@@ -426,7 +426,7 @@ test("normalizes object tool message content to JSON string", async () => {
     },
   )
 
-  fetchHost.fetch = toolObjectFetchMock
+  fetchHost.fetch = toolObjectFetchMock as unknown as typeof fetch
 
   try {
     await createChatCompletions({
