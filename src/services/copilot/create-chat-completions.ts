@@ -595,8 +595,14 @@ export const createChatCompletions = async (
 
   // Build headers and add X-Initiator
   const headers: Record<string, string> = {
-    ...copilotHeaders(state, { vision: enableVision, token, hasTools }),
+    ...copilotHeaders(state, { vision: enableVision, token }),
     "X-Initiator": isAgentCall ? "agent" : "user",
+  }
+
+  if (hasTools) {
+    consola.debug(
+      `Agentic request: tools=${normalizedPayload.tools?.length}, tool_choice=${JSON.stringify(normalizedPayload.tool_choice)}, integration-id=${headers["copilot-integration-id"]}, intent=${headers["openai-intent"]}`,
+    )
   }
 
   const sendRequest = (requestPayload: ChatCompletionsPayload) =>

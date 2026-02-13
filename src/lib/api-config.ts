@@ -20,14 +20,13 @@ export const copilotBaseUrl = (state: State) =>
 interface CopilotHeadersOptions {
   vision?: boolean
   token?: string
-  hasTools?: boolean
 }
 
 export const copilotHeaders = (
   state: State,
   options: CopilotHeadersOptions = {},
 ) => {
-  const { vision = false, token, hasTools = false } = options
+  const { vision = false, token } = options
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token ?? state.copilotToken}`,
     "content-type": standardHeaders()["content-type"],
@@ -35,7 +34,7 @@ export const copilotHeaders = (
     "editor-version": `vscode/${state.vsCodeVersion}`,
     "editor-plugin-version": EDITOR_PLUGIN_VERSION,
     "user-agent": USER_AGENT,
-    "openai-intent": hasTools ? "conversation-agent" : "conversation-panel",
+    "openai-intent": "conversation-agent",
     "x-github-api-version": API_VERSION,
     "x-request-id": randomUUID(),
     "x-vscode-user-agent-library-version": "electron-fetch",

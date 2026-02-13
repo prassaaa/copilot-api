@@ -787,6 +787,41 @@ async function executeCompletion(
   return handleStreamingResponse(c, ctx)
 }
 
+/**
+ * When tools are provided, inject a developer message that instructs the model
+ * to actually use the tools via function calling (tool_calls), not describe
+ * actions in plain text. This is needed because the Copilot API backend may
+ * inject a system prompt that steers the model toward conversational responses,
+ * causing it to ignore tool definitions from the client.
+ */
+function injectToolUseInstruction(
+  payload: ChatCompletionsPayload,
+): ChatCompletionsPayload {
+  if (!payload.tools || payload.tools.length === 0) {
+    return payload
+  }
+
+  const toolNames = payload.tools.map((t) => t.function.name).join(", ")
+  const instruction: Message = {
+    role: "developer",
+    content:
+      `You have access to the following tools: ${toolNames}. `
+      + "When you need to perform an action that matches a tool, you MUST use "
+      + "the tool by emitting a tool_calls response. Do NOT describe the action "
+      + "in plain text. Always prefer calling tools over describing what you "
+      + "would do.",
+  }
+
+  // Insert after existing system/developer messages, before user messages
+  const systemMessages = payload.messages.filter((m) => isSystemOrDeveloper(m))
+  const otherMessages = payload.messages.filter((m) => !isSystemOrDeveloper(m))
+
+  return {
+    ...payload,
+    messages: [...systemMessages, instruction, ...otherMessages],
+  }
+}
+
 export async function handleCompletion(c: Context) {
   const startTime = Date.now()
   let requestId: string | undefined
@@ -799,8 +834,10 @@ export async function handleCompletion(c: Context) {
   const payload = await truncateMessages(
     applyMaxTokensIfNeeded(
       preparePayload(
-        normalizeTools(
-          denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
+        injectToolUseInstruction(
+          normalizeTools(
+            denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
+          ),
         ),
       ),
     ),
