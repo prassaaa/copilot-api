@@ -30,10 +30,13 @@ const encodingCache = new Map<string, Encoder>()
  * Calculate tokens for tool calls
  */
 const calculateToolCallsTokens = (
-  toolCalls: Array<ToolCall>,
+  toolCalls: Array<ToolCall> | undefined,
   encoder: Encoder,
   constants: ReturnType<typeof getModelConstants>,
 ): number => {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return 0
+  }
   let tokens = 0
   for (const toolCall of toolCalls) {
     tokens += constants.funcInit
@@ -79,7 +82,7 @@ const calculateMessageTokens = (
     if (key === "name") {
       tokens += tokensPerName
     }
-    if (key === "tool_calls") {
+    if (key === "tool_calls" && Array.isArray(value)) {
       tokens += calculateToolCallsTokens(
         value as Array<ToolCall>,
         encoder,

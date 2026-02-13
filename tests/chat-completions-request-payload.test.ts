@@ -165,6 +165,16 @@ describe("normalizeChatCompletionsPayload", () => {
     expect(assistant.tool_calls?.[0]?.function.arguments).toBe("{}")
   })
 
+  test("does not include tool_calls property when input has none", () => {
+    const normalized = normalizeChatCompletionsPayload({
+      model: "gpt-4.1",
+      messages: [{ role: "assistant", content: "done" }],
+    })
+
+    const [assistant] = normalized.messages
+    expect(Object.hasOwn(assistant, "tool_calls")).toBe(false)
+  })
+
   test("throws when messages is not an array", async () => {
     await expectInvalidPayload(
       { model: "gpt-4.1", messages: { role: "user", content: "Hello" } },

@@ -167,7 +167,10 @@ function coerceMessage(messageLike: unknown): Message | null {
   if (typeof messageLike.tool_call_id === "string") {
     message.tool_call_id = messageLike.tool_call_id
   }
-  message.tool_calls = normalizeToolCalls(messageLike.tool_calls)
+  const toolCalls = normalizeToolCalls(messageLike.tool_calls)
+  if (toolCalls) {
+    message.tool_calls = toolCalls
+  }
 
   return message
 }
