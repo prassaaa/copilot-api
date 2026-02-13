@@ -87,7 +87,23 @@ function normalizeContent(
 
 function normalizeToolCallArguments(argumentsLike: unknown): string {
   if (typeof argumentsLike === "string") {
-    return argumentsLike.length > 0 ? argumentsLike : "{}"
+    const trimmed = argumentsLike.trim()
+    if (trimmed.length === 0) return "{}"
+
+    try {
+      JSON.parse(trimmed)
+      return trimmed
+    } catch {
+      // Repair invalid escape sequences (e.g. Windows paths with single '\')
+      // that commonly trigger upstream "invalid arguments" parse errors.
+      const repaired = trimmed.replaceAll(/\\(?!["\\/bfnrtu])/g, "\\\\")
+      try {
+        JSON.parse(repaired)
+        return repaired
+      } catch {
+        return "{}"
+      }
+    }
   }
   if (argumentsLike === undefined) return "{}"
   try {

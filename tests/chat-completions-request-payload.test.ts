@@ -118,6 +118,53 @@ describe("normalizeChatCompletionsPayload", () => {
     )
   })
 
+  test("repairs invalid escape sequences in tool call arguments", () => {
+    const malformedArguments = String.raw`{"path":"C:\Users\prasa"}`
+    const normalized = normalizeChatCompletionsPayload({
+      model: "gpt-4.1",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool-2",
+              type: "function",
+              function: { name: "edit_file", arguments: malformedArguments },
+            },
+          ],
+        },
+      ],
+    })
+
+    const [assistant] = normalized.messages
+    expect(assistant.tool_calls?.[0]?.function.arguments).toBe(
+      String.raw`{"path":"C:\\Users\\prasa"}`,
+    )
+  })
+
+  test("falls back to empty object for unparsable tool call arguments", () => {
+    const normalized = normalizeChatCompletionsPayload({
+      model: "gpt-4.1",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool-3",
+              type: "function",
+              function: { name: "edit_file", arguments: "{bad-json" },
+            },
+          ],
+        },
+      ],
+    })
+
+    const [assistant] = normalized.messages
+    expect(assistant.tool_calls?.[0]?.function.arguments).toBe("{}")
+  })
+
   test("throws when messages is not an array", async () => {
     await expectInvalidPayload(
       { model: "gpt-4.1", messages: { role: "user", content: "Hello" } },
