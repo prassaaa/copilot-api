@@ -14,6 +14,7 @@ document.addEventListener("alpine:init", () => {
       passwordRequired: false,
       password: "",
       checking: true,
+      loginError: null,
     },
 
     // Toast
@@ -320,6 +321,7 @@ document.addEventListener("alpine:init", () => {
     // Login
     async login() {
       this.loading = true
+      this.auth.loginError = null // Clear previous errors
       try {
         const response = await fetch("/api/login", {
           method: "POST",
@@ -329,20 +331,25 @@ document.addEventListener("alpine:init", () => {
         
         // Handle network errors
         if (!response.ok && response.status >= 500) {
-          this.showToast("Server error. Please try again later.", "error")
+          const errorMsg = "Server error. Please try again later."
+          this.auth.loginError = errorMsg
+          this.showToast(errorMsg, "error")
           return
         }
 
         const data = await response.json()
 
         if (response.status === 401 || data.status === "error") {
-          this.showToast(data.error || "Invalid password", "error")
+          const errorMsg = data.error || "Invalid password"
+          this.auth.loginError = errorMsg
+          this.showToast(errorMsg, "error")
           return
         }
 
         if (data.status === "ok") {
           this.auth.authenticated = true
           this.auth.password = ""
+          this.auth.loginError = null
           this.showToast("Login successful", "success")
           await this.fetchData()
           this.connectLogStream()
@@ -361,6 +368,7 @@ document.addEventListener("alpine:init", () => {
           errorMessage = error.message
         }
         
+        this.auth.loginError = errorMessage
         this.showToast(errorMessage, "error")
       } finally {
         this.loading = false
