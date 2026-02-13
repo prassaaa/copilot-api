@@ -113,6 +113,26 @@ function forwardRelevantErrorHeaders(c: Context, response: Response): void {
   }
 }
 
+const QUOTA_ERROR_CODES = new Set(["quota_exceeded", "insufficient_quota"])
+
+const QUOTA_ERROR_KEYWORDS = ["no quota", "quota exceeded"]
+
+/**
+ * Detect whether an error is a quota-exhaustion error.
+ * Quota errors should NOT be forwarded as 429 (Too Many Requests) because
+ * clients like Cursor treat 429 as retryable and loop endlessly.
+ * Instead we return 402 (Payment Required) which signals a non-retryable
+ * billing/quota issue.
+ */
+function isQuotaError(
+  normalized: ReturnType<typeof normalizeHttpError>,
+): boolean {
+  const code = normalized.code?.toLowerCase()
+  if (code && QUOTA_ERROR_CODES.has(code)) return true
+  const msg = normalized.message.toLowerCase()
+  return QUOTA_ERROR_KEYWORDS.some((kw) => msg.includes(kw))
+}
+
 export async function forwardError(c: Context, error: unknown) {
   consola.error("Error occurred:", error)
 
@@ -130,11 +150,20 @@ export async function forwardError(c: Context, error: unknown) {
       }
     }
     consola.error("HTTP error:", normalized)
+
+    // Quota errors: return 402 instead of 429 so clients stop retrying.
+    // Also strip retry-after since this is not a temporary condition.
+    let status = error.response.status as ContentfulStatusCode
+    if (status === 429 && isQuotaError(normalized)) {
+      status = 402
+      c.header("retry-after", null as unknown as string)
+    }
+
     return c.json(
       {
         error: normalized,
       },
-      error.response.status as ContentfulStatusCode,
+      status,
     )
   }
 
