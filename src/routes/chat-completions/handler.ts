@@ -29,7 +29,11 @@ import {
   type Message,
 } from "~/services/copilot/create-chat-completions"
 
-import { normalizeTools, preparePayload } from "./normalize-payload"
+import {
+  normalizeTools,
+  preparePayload,
+  sanitizeAnthropicFields,
+} from "./normalize-payload"
 import {
   denormalizeRequestToolCallIds,
   normalizeResponseToolCallIds,
@@ -573,39 +577,6 @@ async function executeCompletion(
   return handleStreamingResponse(c, ctx)
 }
 
-/**
- * Inject a developer message instructing the model to use tools via tool_calls,
- * not plain text. Needed because Copilot API may inject a system prompt that
- * steers the model toward conversational responses.
- */
-function injectToolUseInstruction(
-  payload: ChatCompletionsPayload,
-): ChatCompletionsPayload {
-  if (!payload.tools || payload.tools.length === 0) {
-    return payload
-  }
-
-  const toolNames = payload.tools.map((t) => t.function.name).join(", ")
-  const instruction: Message = {
-    role: "developer",
-    content:
-      `You have access to the following tools: ${toolNames}. `
-      + "When you need to perform an action that matches a tool, you MUST use "
-      + "the tool by emitting a tool_calls response. Do NOT describe the action "
-      + "in plain text. Always prefer calling tools over describing what you "
-      + "would do.",
-  }
-
-  // Insert after system/developer messages, before user messages
-  const systemMessages = payload.messages.filter((m) => isSystemOrDeveloper(m))
-  const otherMessages = payload.messages.filter((m) => !isSystemOrDeveloper(m))
-
-  return {
-    ...payload,
-    messages: [...systemMessages, instruction, ...otherMessages],
-  }
-}
-
 export async function handleCompletion(c: Context) {
   const startTime = Date.now()
   let requestId: string | undefined
@@ -618,8 +589,8 @@ export async function handleCompletion(c: Context) {
   const payload = await truncateMessages(
     applyMaxTokensIfNeeded(
       preparePayload(
-        injectToolUseInstruction(
-          normalizeTools(
+        normalizeTools(
+          sanitizeAnthropicFields(
             denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
           ),
         ),
