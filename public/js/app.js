@@ -362,6 +362,7 @@ document.addEventListener("alpine:init", () => {
           this.connectNotificationStream()
           await this.checkVersion()
           this.startVersionCheckPolling()
+          this.startInactivityTimer()
         }
       } catch (error) {
         console.error("Login error:", error)
@@ -386,7 +387,7 @@ document.addEventListener("alpine:init", () => {
       // Only track inactivity when password is required (auth is active)
       if (!this.auth.passwordRequired) return
 
-      const activityEvents = ["click", "keydown", "mousemove", "scroll", "touchstart"]
+      const activityEvents = ["click", "keydown", "scroll", "touchstart"]
       this._inactivityHandler = () => this.resetInactivityTimer()
 
       for (const event of activityEvents) {
@@ -403,6 +404,7 @@ document.addEventListener("alpine:init", () => {
 
       this.inactivityTimeout = setTimeout(async () => {
         if (this.auth.authenticated) {
+          this.stopInactivityTimer()
           this.sessionExpired = true
         }
       }, this.inactivityDuration)
@@ -420,7 +422,7 @@ document.addEventListener("alpine:init", () => {
       }
 
       if (this._inactivityHandler) {
-        const activityEvents = ["click", "keydown", "mousemove", "scroll", "touchstart"]
+        const activityEvents = ["click", "keydown", "scroll", "touchstart"]
         for (const event of activityEvents) {
           document.removeEventListener(event, this._inactivityHandler)
         }
