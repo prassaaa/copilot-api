@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test"
 
+import type { ChatCompletionsPayload } from "../src/services/copilot/create-chat-completions"
+import type { Model } from "../src/services/copilot/get-models"
+
 import { getTokenCount } from "../src/lib/tokenizer"
 
 test("getTokenCount tolerates message with undefined tool_calls property", async () => {
@@ -12,9 +15,9 @@ test("getTokenCount tolerates message with undefined tool_calls property", async
         tool_calls: undefined,
       },
     ],
-  } as const
+  } as unknown as ChatCompletionsPayload
 
-  const model = {
+  const model: Model = {
     capabilities: {
       family: "gpt-test",
       object: "model_capabilities",
@@ -28,11 +31,8 @@ test("getTokenCount tolerates message with undefined tool_calls property", async
     preview: false,
     vendor: "openai",
     version: "1",
-  } as const
+  }
 
-  const tokenCount = await getTokenCount(
-    payload as Parameters<typeof getTokenCount>[0],
-    model as Parameters<typeof getTokenCount>[1],
-  )
+  const tokenCount = await getTokenCount(payload, model)
   expect(tokenCount.input).toBeGreaterThan(0)
 })
