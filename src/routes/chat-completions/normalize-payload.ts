@@ -116,13 +116,83 @@ function stripModelPrefix(
   return payload
 }
 
+interface ClassifiedParts {
+  toolResults: Array<Record<string, unknown>>
+  toolUses: Array<Record<string, unknown>>
+  other: Array<unknown>
+}
+
+function classifyContentParts(parts: Array<unknown>): ClassifiedParts {
+  const toolResults: Array<Record<string, unknown>> = []
+  const toolUses: Array<Record<string, unknown>> = []
+  const other: Array<unknown> = []
+
+  for (const part of parts) {
+    const raw = part as Record<string, unknown>
+    if (raw.type === "tool_result") {
+      toolResults.push(raw)
+    } else if (raw.type === "tool_use") {
+      toolUses.push(raw)
+    } else {
+      other.push(part)
+    }
+  }
+
+  return { toolResults, toolUses, other }
+}
+
+function toolUsePartsToAssistantMessage(
+  toolUseParts: Array<Record<string, unknown>>,
+  otherParts: Array<unknown>,
+): Message {
+  const textContent = otherParts
+    .filter(
+      (p) =>
+        (p as Record<string, unknown>).type === "text"
+        && (p as Record<string, unknown>).text,
+    )
+    .map((p) => (p as Record<string, unknown>).text as string)
+    .join("")
+
+  return {
+    role: "assistant",
+    content: textContent || null,
+    tool_calls: toolUseParts.map((tu) => ({
+      id: (tu.id as string) || "",
+      type: "function" as const,
+      function: {
+        name: (tu.name as string) || "",
+        arguments:
+          typeof tu.input === "string" ?
+            tu.input
+          : JSON.stringify(tu.input ?? {}),
+      },
+    })),
+  }
+}
+
+function toolResultPartToToolMessage(tr: Record<string, unknown>): Message {
+  return {
+    role: "tool",
+    tool_call_id: (tr.tool_use_id as string) || "",
+    content:
+      typeof tr.content === "string" ?
+        tr.content
+      : JSON.stringify(tr.content ?? ""),
+  }
+}
+
 /**
- * Strip Anthropic-specific fields (`cache_control`) from message content parts
- * and convert Anthropic-style `tool_result` blocks (sent inside user messages)
- * into OpenAI `tool` role messages.
+ * Strip Anthropic-specific fields and convert Anthropic message format
+ * to OpenAI format.
  *
- * Cursor sometimes sends messages in Anthropic format even when talking to an
- * OpenAI-compatible endpoint.
+ * Handles:
+ * - `tool_result` blocks (in any message) → OpenAI `tool` role messages
+ * - `tool_use` blocks (in assistant messages) → OpenAI `tool_calls` array
+ * - `cache_control` field removal from content parts
+ *
+ * Cursor sometimes sends the entire conversation in Anthropic format
+ * even when talking to an OpenAI-compatible endpoint.
  */
 export function sanitizeAnthropicFields(
   payload: ChatCompletionsPayload,
@@ -131,49 +201,41 @@ export function sanitizeAnthropicFields(
   let changed = false
 
   for (const msg of payload.messages) {
-    // Handle Anthropic tool_result blocks inside user messages
-    if (msg.role === "user" && Array.isArray(msg.content)) {
-      const toolResults = msg.content.filter(
-        (p) => (p as unknown as Record<string, unknown>).type === "tool_result",
-      )
-
-      if (toolResults.length > 0) {
-        changed = true
-
-        // Extract tool_result blocks → OpenAI tool role messages
-        for (const tr of toolResults) {
-          const raw = tr as unknown as Record<string, unknown>
-          outMessages.push({
-            role: "tool",
-            tool_call_id: (raw.tool_use_id as string) || "",
-            content:
-              typeof raw.content === "string" ?
-                raw.content
-              : JSON.stringify(raw.content),
-          })
-        }
-
-        // Keep remaining (non-tool_result) content parts as a user message
-        const otherParts = msg.content.filter(
-          (p) =>
-            (p as unknown as Record<string, unknown>).type !== "tool_result",
-        )
-        if (otherParts.length > 0) {
-          outMessages.push({ ...msg, content: stripCacheControl(otherParts) })
-        }
-        continue
-      }
-
-      // No tool_result — just strip cache_control
-      const stripped = stripCacheControl(msg.content)
-      if (stripped !== msg.content) {
-        changed = true
-        outMessages.push({ ...msg, content: stripped })
-        continue
-      }
+    if (!Array.isArray(msg.content)) {
+      outMessages.push(msg)
+      continue
     }
 
-    outMessages.push(msg)
+    const { toolResults, toolUses, other } = classifyContentParts(
+      msg.content as Array<unknown>,
+    )
+
+    // No Anthropic blocks found — just strip cache_control
+    if (toolResults.length === 0 && toolUses.length === 0) {
+      const stripped = stripCacheControl(msg.content)
+      outMessages.push({ ...msg, content: stripped })
+      continue
+    }
+
+    changed = true
+
+    if (toolUses.length > 0) {
+      outMessages.push(toolUsePartsToAssistantMessage(toolUses, other))
+    }
+
+    for (const tr of toolResults) {
+      outMessages.push(toolResultPartToToolMessage(tr))
+    }
+
+    // Keep remaining non-tool parts as a separate message (if any)
+    if (other.length > 0 && toolUses.length === 0) {
+      outMessages.push({
+        ...msg,
+        content: stripCacheControl(
+          other as Message["content"] & Array<unknown>,
+        ),
+      })
+    }
   }
 
   return changed ? { ...payload, messages: outMessages } : payload
