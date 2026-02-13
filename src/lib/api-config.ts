@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+import { hostname } from "node:os"
 
 import type { State } from "./state"
 
@@ -12,6 +13,13 @@ const EDITOR_PLUGIN_VERSION = `copilot-chat/${COPILOT_VERSION}`
 const USER_AGENT = `GitHubCopilotChat/${COPILOT_VERSION}`
 
 const API_VERSION = "2025-10-01"
+
+/**
+ * Stable per-machine identifier derived from the hostname.
+ * VS Code sends a similar `vscode-machineid` header; some Copilot API
+ * endpoints reject requests that lack it.
+ */
+const MACHINE_ID = createHash("sha256").update(hostname()).digest("hex")
 
 export const copilotBaseUrl = (state: State) =>
   state.accountType === "individual" ?
@@ -38,6 +46,8 @@ export const copilotHeaders = (
     "x-github-api-version": API_VERSION,
     "x-request-id": randomUUID(),
     "x-vscode-user-agent-library-version": "electron-fetch",
+    "vscode-machineid": MACHINE_ID,
+    "vscode-sessionid": randomUUID(),
   }
 
   if (vision) headers["copilot-vision-request"] = "true"
