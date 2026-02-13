@@ -453,3 +453,61 @@ test("normalizes object tool message content to JSON string", async () => {
     fetchHost.fetch = previousFetch
   }
 })
+
+test("uses stable copilot integration header for tool calls", async () => {
+  const fetchHost = globalThis as unknown as { fetch: typeof fetch }
+  const previousFetch = fetchHost.fetch
+  let capturedHeaders: Record<string, string> = {}
+
+  const headerFetchMock = mock(
+    (
+      _url: string,
+      opts: {
+        headers: Record<string, string>
+      },
+    ) => {
+      capturedHeaders = opts.headers
+      return new Response(
+        JSON.stringify({
+          choices: [],
+          id: "header-check",
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    },
+  )
+
+  fetchHost.fetch = headerFetchMock as unknown as typeof fetch
+
+  try {
+    await createChatCompletions({
+      messages: [{ role: "user", content: "Run tool." }],
+      model: "gpt-test",
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "get_weather",
+            description: "Get weather",
+            parameters: {
+              type: "object",
+              properties: {
+                location: { type: "string" },
+              },
+              required: ["location"],
+            },
+          },
+        },
+      ],
+    })
+
+    expect(capturedHeaders["copilot-integration-id"]).toBe("vscode-chat")
+    expect(capturedHeaders["openai-intent"]).toBe("conversation-agent")
+  } finally {
+    fetchHost.fetch = previousFetch
+  }
+})

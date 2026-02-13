@@ -31,7 +31,7 @@ export const copilotHeaders = (
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token ?? state.copilotToken}`,
     "content-type": standardHeaders()["content-type"],
-    "copilot-integration-id": hasTools ? "vscode-chat-agent" : "vscode-chat",
+    "copilot-integration-id": "vscode-chat",
     "editor-version": `vscode/${state.vsCodeVersion}`,
     "editor-plugin-version": EDITOR_PLUGIN_VERSION,
     "user-agent": USER_AGENT,
