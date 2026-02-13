@@ -5,14 +5,30 @@ import type {
 } from "~/services/copilot/create-chat-completions"
 
 /**
- * Map of normalized tool call IDs to originals for lossless round-trip.
+ * LRU map of normalized tool call IDs to originals for lossless round-trip.
+ *
+ * Uses access-time tracking so actively-used mappings (from ongoing agentic
+ * sessions) are never evicted while stale ones are.  Every read (denormalize)
+ * refreshes the entry, keeping it alive as long as the conversation references
+ * it.
  */
 const toolCallIdMap = new Map<string, string>()
 const TOOL_CALL_ID_MAP_MAX_SIZE = 10000
+const TOOL_CALL_ID_MAP_PRUNE_COUNT = 1000
+
+function touchToolCallId(normalized: string, original: string): void {
+  // Map#delete + Map#set moves the entry to the end (newest).
+  // This turns the built-in insertion-order into LRU order.
+  toolCallIdMap.delete(normalized)
+  toolCallIdMap.set(normalized, original)
+}
 
 function pruneToolCallIdMap(): void {
   if (toolCallIdMap.size <= TOOL_CALL_ID_MAP_MAX_SIZE) return
-  const excess = toolCallIdMap.size - TOOL_CALL_ID_MAP_MAX_SIZE + 1000
+  const excess =
+    toolCallIdMap.size
+    - TOOL_CALL_ID_MAP_MAX_SIZE
+    + TOOL_CALL_ID_MAP_PRUNE_COUNT
   const iterator = toolCallIdMap.keys()
   for (let i = 0; i < excess; i++) {
     const key = iterator.next().value
@@ -28,7 +44,7 @@ export function normalizeToolCallId(id: string): string {
   const safe = id.replaceAll(/[^\w-]/g, "_")
   const normalized = `call_${safe}`
 
-  toolCallIdMap.set(normalized, id)
+  touchToolCallId(normalized, id)
   pruneToolCallIdMap()
 
   return normalized
@@ -41,6 +57,8 @@ function denormalizeToolCallId(id: string): string {
 
   const original = toolCallIdMap.get(id)
   if (original) {
+    // Refresh LRU position — this mapping is still in active use.
+    touchToolCallId(id, original)
     return original
   }
 

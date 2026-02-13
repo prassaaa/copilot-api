@@ -690,12 +690,6 @@ export const createChatCompletions = async (
   // Get token from pool (with tracking) or fallback to state
   const token = await getActiveCopilotToken()
 
-  const enableVision = normalizedPayload.messages.some(
-    (x) =>
-      typeof x.content !== "string"
-      && x.content?.some((x) => x.type === "image_url"),
-  )
-
   // Agent/user check for X-Initiator header.
   // Only the latest turn should decide initiator type.
   const lastMessage = normalizedPayload.messages.at(-1)
@@ -705,22 +699,28 @@ export const createChatCompletions = async (
   // Detect if this request includes tool definitions for agentic mode
   const hasTools = (normalizedPayload.tools?.length ?? 0) > 0
 
-  // Build headers and add X-Initiator
-  const headers: Record<string, string> = {
-    ...copilotHeaders(state, { vision: enableVision, token }),
-    "X-Initiator": isAgentCall ? "agent" : "user",
-  }
-
   if (hasTools) {
     consola.debug(
-      `Agentic request: tools=${normalizedPayload.tools?.length}, tool_choice=${JSON.stringify(normalizedPayload.tool_choice)}, integration-id=${headers["copilot-integration-id"]}, intent=${headers["openai-intent"]}`,
+      `Agentic request: tools=${normalizedPayload.tools?.length}, tool_choice=${JSON.stringify(normalizedPayload.tool_choice)}`,
     )
+  }
+
+  const buildHeaders = (requestPayload: ChatCompletionsPayload) => {
+    const payloadEnableVision = requestPayload.messages.some(
+      (x) =>
+        typeof x.content !== "string"
+        && x.content?.some((x) => x.type === "image_url"),
+    )
+    return {
+      ...copilotHeaders(state, { vision: payloadEnableVision, token }),
+      "X-Initiator": isAgentCall ? "agent" : "user",
+    }
   }
 
   const sendRequest = (requestPayload: ChatCompletionsPayload) =>
     fetchWithTimeout(`${copilotBaseUrl(state)}/chat/completions`, {
       method: "POST",
-      headers,
+      headers: buildHeaders(requestPayload),
       body: JSON.stringify(requestPayload),
       timeout: CHAT_COMPLETION_TIMEOUT,
     })

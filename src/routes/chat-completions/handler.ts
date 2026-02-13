@@ -330,11 +330,32 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
         error: error instanceof Error ? error.message : String(error),
       })
 
-      // Send a valid ChatCompletionChunk with finish_reason so clients like
-      // Cursor properly terminate instead of retrying. Non-standard error
-      // JSON (without id/object/choices) causes clients to misparse and loop.
+      // Send a ChatCompletionChunk with the error message as content so
+      // clients like Cursor can display the error and stop.  A completely
+      // empty chunk with finish_reason "stop" (previous behaviour) caused
+      // clients to misinterpret the response as success and retry / loop.
       if (!doneSent) {
-        const errorChunk: ChatCompletionChunk = {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
+        const errorContentChunk: ChatCompletionChunk = {
+          id: "chatcmpl-error",
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: ctx.payload.model,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                content: `\n\n[Error: ${errorMessage}]`,
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        }
+        await stream.writeSSE({ data: JSON.stringify(errorContentChunk) })
+
+        const errorStopChunk: ChatCompletionChunk = {
           id: "chatcmpl-error",
           object: "chat.completion.chunk",
           created: Math.floor(Date.now() / 1000),
@@ -348,7 +369,7 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
             },
           ],
         }
-        await stream.writeSSE({ data: JSON.stringify(errorChunk) })
+        await stream.writeSSE({ data: JSON.stringify(errorStopChunk) })
         await stream.writeSSE({ data: "[DONE]" })
       }
     }
@@ -431,6 +452,8 @@ function isSystemOrDeveloper(msg: Message): boolean {
 function removeOldestWithToolCleanup(messages: Array<Message>): Array<Message> {
   const [removed, ...rest] = messages
   if (removed.role !== "assistant" || !removed.tool_calls?.length) {
+    // If removing a tool message, it is safe — the orphan cleanup pass below
+    // will take care of any remaining inconsistencies.
     return rest
   }
 
@@ -443,6 +466,54 @@ function removeOldestWithToolCleanup(messages: Array<Message>): Array<Message> {
       || !toolCallIds.has(msg.tool_call_id),
   )
   return firstNonTool === -1 ? [] : rest.slice(firstNonTool)
+}
+
+/**
+ * Remove orphaned messages after truncation:
+ * 1. Tool messages whose tool_call_id has no matching assistant tool_calls
+ * 2. Assistant messages with tool_calls whose tool results are missing
+ *
+ * Both cases confuse models and can cause them to re-issue tool calls (loops).
+ */
+function removeOrphanedToolMessages(messages: Array<Message>): Array<Message> {
+  // Collect all tool_call IDs from assistant messages
+  const assistantToolCallIds = new Set<string>()
+  for (const msg of messages) {
+    if (msg.role === "assistant" && msg.tool_calls?.length) {
+      for (const tc of msg.tool_calls) {
+        assistantToolCallIds.add(tc.id)
+      }
+    }
+  }
+
+  // Collect all tool_call_ids referenced by tool messages
+  const toolResultIds = new Set<string>()
+  for (const msg of messages) {
+    if (msg.role === "tool" && msg.tool_call_id) {
+      toolResultIds.add(msg.tool_call_id)
+    }
+  }
+
+  return messages.filter((msg) => {
+    // Remove tool messages that reference a tool_call_id with no assistant match
+    if (msg.role === "tool" && msg.tool_call_id) {
+      return assistantToolCallIds.has(msg.tool_call_id)
+    }
+
+    // Remove assistant messages whose tool_calls have no matching tool results
+    // (the model would see pending tool calls and may try to re-invoke them)
+    if (msg.role === "assistant" && msg.tool_calls?.length) {
+      const hasAllResults = msg.tool_calls.every((tc) =>
+        toolResultIds.has(tc.id),
+      )
+      if (!hasAllResults) {
+        // Strip the tool_calls but keep the message if it has content
+        return false
+      }
+    }
+
+    return true
+  })
 }
 
 async function computeInputTokens(
@@ -535,6 +606,10 @@ async function truncateMessages(
 
   const removedCount = originalCount - nonSystemMessages.length
   if (removedCount > 0) {
+    // Clean up any orphaned tool messages or assistant messages with
+    // dangling tool_calls that lost their corresponding tool results.
+    nonSystemMessages = removeOrphanedToolMessages(nonSystemMessages)
+
     consola.warn(
       `Truncated ${removedCount} messages to fit within ${maxPromptTokens} prompt token limit (${initialInput} → ${currentInput} tokens)`,
     )
