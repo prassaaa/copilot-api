@@ -455,16 +455,53 @@ async function computeInputTokens(
 
 /**
  * Truncate conversation messages when total token count exceeds the model's
- * max_prompt_tokens limit. Preserves system/developer messages and the most
- * recent messages, removing oldest non-system messages first.
+ * prompt token limit. Uses max_prompt_tokens when available, otherwise falls
+ * back to max_context_window_tokens (minus an output reserve). Preserves
+ * system/developer messages and the most recent messages, removing oldest
+ * non-system messages first.
  */
+/**
+ * Resolve the effective prompt token limit for a model.
+ *
+ * Priority:
+ * 1. `max_prompt_tokens` — explicit prompt limit from the API
+ * 2. `max_context_window_tokens` minus a reserve for output tokens
+ *
+ * A 10 % reserve (min 4 096 tokens) is subtracted from the context window so
+ * the model still has room to generate a response.
+ */
+function resolvePromptTokenLimit(
+  limits:
+    | {
+        max_prompt_tokens?: number
+        max_context_window_tokens?: number
+        max_output_tokens?: number
+      }
+    | undefined,
+): number | null {
+  if (limits?.max_prompt_tokens) return limits.max_prompt_tokens
+
+  if (limits?.max_context_window_tokens) {
+    const contextWindow = limits.max_context_window_tokens
+    const outputReserve =
+      limits.max_output_tokens ?
+        Math.min(limits.max_output_tokens, Math.floor(contextWindow * 0.1))
+      : Math.max(4096, Math.floor(contextWindow * 0.1))
+    return contextWindow - outputReserve
+  }
+
+  return null
+}
+
 async function truncateMessages(
   payload: ChatCompletionsPayload,
 ): Promise<ChatCompletionsPayload> {
   const selectedModel = state.models?.data.find((m) => m.id === payload.model)
   if (!selectedModel) return payload
 
-  const maxPromptTokens = selectedModel.capabilities.limits?.max_prompt_tokens
+  const maxPromptTokens = resolvePromptTokenLimit(
+    selectedModel.capabilities.limits,
+  )
   if (!maxPromptTokens) return payload
 
   const initialInput = await computeInputTokens(payload, selectedModel)
