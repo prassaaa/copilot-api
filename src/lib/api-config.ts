@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { hostname } from "node:os"
+import { networkInterfaces } from "node:os"
 
 import type { State } from "./state"
 
@@ -15,11 +15,25 @@ const USER_AGENT = `GitHubCopilotChat/${COPILOT_VERSION}`
 const API_VERSION = "2025-10-01"
 
 /**
- * Stable per-machine identifier derived from the hostname.
- * VS Code sends a similar `vscode-machineid` header; some Copilot API
- * endpoints reject requests that lack it.
+ * Stable per-machine identifier derived from the first valid network MAC
+ * address (SHA-256 hashed).  VS Code sends a `vscode-machineid` header and
+ * some Copilot API endpoints reject requests that lack it.
  */
-const MACHINE_ID = createHash("sha256").update(hostname()).digest("hex")
+function generateMachineId(): string {
+  const INVALID_MACS = new Set(["00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"])
+  const interfaces = networkInterfaces()
+  for (const [, addrs] of Object.entries(interfaces)) {
+    for (const iface of addrs ?? []) {
+      if (iface.mac && !INVALID_MACS.has(iface.mac)) {
+        return createHash("sha256").update(iface.mac, "utf8").digest("hex")
+      }
+    }
+  }
+  // Fallback — should rarely happen on real machines
+  return createHash("sha256").update(randomUUID()).digest("hex")
+}
+
+const MACHINE_ID = generateMachineId()
 
 export const copilotBaseUrl = (state: State) =>
   state.accountType === "individual" ?
