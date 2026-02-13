@@ -155,6 +155,11 @@ document.addEventListener("alpine:init", () => {
       completing: false,
     },
 
+    // Inactivity auto-logout
+    inactivityTimeout: null,
+    inactivityDuration: 15 * 60 * 1000, // 15 minutes in milliseconds
+    sessionExpired: false,
+
     // Chart instance
     usageChart: null,
     chartType: "bar", // 'bar' or 'doughnut'
@@ -207,6 +212,7 @@ document.addEventListener("alpine:init", () => {
         this.connectNotificationStream()
         await this.checkVersion()
         this.startVersionCheckPolling()
+        this.startInactivityTimer()
 
         // Auto-refresh every 30 seconds
         this.autoRefreshInterval = setInterval(() => {
@@ -375,11 +381,59 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
+    // Inactivity auto-logout
+    startInactivityTimer() {
+      // Only track inactivity when password is required (auth is active)
+      if (!this.auth.passwordRequired) return
+
+      const activityEvents = ["click", "keydown", "mousemove", "scroll", "touchstart"]
+      this._inactivityHandler = () => this.resetInactivityTimer()
+
+      for (const event of activityEvents) {
+        document.addEventListener(event, this._inactivityHandler, { passive: true })
+      }
+
+      this.resetInactivityTimer()
+    },
+
+    resetInactivityTimer() {
+      if (this.inactivityTimeout) {
+        clearTimeout(this.inactivityTimeout)
+      }
+
+      this.inactivityTimeout = setTimeout(async () => {
+        if (this.auth.authenticated) {
+          this.sessionExpired = true
+        }
+      }, this.inactivityDuration)
+    },
+
+    async handleSessionExpiredLogin() {
+      this.sessionExpired = false
+      await this.logout()
+    },
+
+    stopInactivityTimer() {
+      if (this.inactivityTimeout) {
+        clearTimeout(this.inactivityTimeout)
+        this.inactivityTimeout = null
+      }
+
+      if (this._inactivityHandler) {
+        const activityEvents = ["click", "keydown", "mousemove", "scroll", "touchstart"]
+        for (const event of activityEvents) {
+          document.removeEventListener(event, this._inactivityHandler)
+        }
+        this._inactivityHandler = null
+      }
+    },
+
     // Logout
     async logout() {
       try {
         await this.requestJson("/api/logout", { method: "POST" })
         this.auth.authenticated = false
+        this.stopInactivityTimer()
         if (this.logsEventSource) {
           this.logsEventSource.close()
           this.logsEventSource = null

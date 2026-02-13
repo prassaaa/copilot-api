@@ -195,6 +195,47 @@
         </div>
     </nav>
 
+    <!-- Session Expired Modal -->
+    <template x-if="sessionExpired">
+        <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60]"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <div class="bg-space-900 border border-space-border rounded-xl p-8 w-full max-w-sm mx-4 shadow-2xl text-center"
+                 x-transition:enter="transition ease-out duration-300 delay-100"
+                 x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                 x-transition:enter-end="opacity-100 scale-100 translate-y-0">
+
+                <!-- Icon -->
+                <div class="mx-auto w-16 h-16 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center mb-5">
+                    <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+
+                <!-- Title -->
+                <h3 class="text-lg font-bold text-white mb-2">Session Expired</h3>
+
+                <!-- Description -->
+                <p class="text-sm text-gray-400 mb-6">
+                    Your session has expired due to <span class="text-yellow-400 font-medium">15 minutes</span> of inactivity. Please log in again to continue.
+                </p>
+
+                <!-- Button -->
+                <button @click="handleSessionExpiredLogin()"
+                        class="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-medium hover:opacity-90 transition-all flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                    </svg>
+                    Back to Login
+                </button>
+            </div>
+        </div>
+    </template>
+
     <!-- Login Modal -->
     <template x-if="auth.passwordRequired && !auth.authenticated && !auth.checking">
         <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
