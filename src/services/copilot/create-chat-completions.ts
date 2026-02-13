@@ -693,7 +693,9 @@ async function sendRequestWithRetry(params: {
 
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
+  options: { signal?: AbortSignal } = {},
 ) => {
+  const { signal } = options
   const normalizedPayload = normalizePayloadContent(payload)
 
   // Get token from pool (with tracking) or fallback to state
@@ -732,6 +734,7 @@ export const createChatCompletions = async (
       headers: buildHeaders(requestPayload),
       body: JSON.stringify(requestPayload),
       timeout: CHAT_COMPLETION_TIMEOUT,
+      signal,
     })
 
   const response = await sendRequestWithRetry({

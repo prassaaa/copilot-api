@@ -369,17 +369,42 @@ async function handleStreamingResponse(
   ctx: CompletionContext,
 ): Promise<Response> {
   consola.debug("Streaming response")
+  const upstreamAbortController = new AbortController()
+  const requestSignal = c.req.raw.signal
+  if (requestSignal.aborted) {
+    upstreamAbortController.abort()
+  } else {
+    requestSignal.addEventListener(
+      "abort",
+      () => upstreamAbortController.abort(),
+      { once: true },
+    )
+  }
 
   // Make the upstream call BEFORE committing to SSE.
   // If this throws (quota, auth, etc.) the error propagates to the caller
   // which returns a proper HTTP error via forwardError.
-  const response = await createChatCompletions(ctx.payload)
+  const response = await createChatCompletions(ctx.payload, {
+    signal: upstreamAbortController.signal,
+  })
   usageStats.recordRequest(ctx.payload.model)
 
   // Non-streaming response received despite stream=true — convert to SSE.
   if (isNonStreaming(response)) {
     return streamSSE(c, async (stream) => {
-      await sendConvertedStreamChunks(response, stream, ctx)
+      stream.onAbort(() => upstreamAbortController.abort())
+      try {
+        await sendConvertedStreamChunks(response, stream, ctx)
+      } catch (error) {
+        if (upstreamAbortController.signal.aborted) {
+          logEmitter.log(
+            "debug",
+            `Chat completion stream aborted by client: model=${ctx.payload.model}`,
+          )
+          return
+        }
+        throw error
+      }
     })
   }
 
@@ -387,6 +412,7 @@ async function handleStreamingResponse(
   return streamSSE(c, async (stream) => {
     let doneSent = false
     let streamOutputTokens = 0
+    stream.onAbort(() => upstreamAbortController.abort())
 
     try {
       const result = await processStreamChunks(response, stream)
@@ -417,6 +443,14 @@ async function handleStreamingResponse(
         `Chat completion stream done: model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
       )
     } catch (error) {
+      if (upstreamAbortController.signal.aborted) {
+        logEmitter.log(
+          "debug",
+          `Chat completion stream aborted by client: model=${ctx.payload.model}`,
+        )
+        return
+      }
+
       const errorMsg = error instanceof Error ? error.message : String(error)
       consola.error("Mid-stream error:", errorMsg)
       logEmitter.log(
