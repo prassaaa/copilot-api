@@ -44,7 +44,9 @@ function denormalizeToolCallId(id: string): string {
     return original
   }
 
-  return id.slice(5)
+  // Keep OpenAI-native call_* IDs unchanged when we don't have a reverse map.
+  // Stripping "call_" here can break tool_result pairing and cause agent loops.
+  return id
 }
 
 export function denormalizeRequestToolCallIds(
