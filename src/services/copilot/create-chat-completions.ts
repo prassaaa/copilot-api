@@ -12,11 +12,23 @@ import { copilotHeaders, copilotBaseUrl } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
 import { fetchWithTimeout } from "~/lib/fetch-with-timeout"
 import { logEmitter } from "~/lib/logger"
+import { sleep } from "~/lib/retry"
 import { state } from "~/lib/state"
 import { getActiveCopilotToken } from "~/lib/token"
 
 // Timeout for chat completions (2 minutes for long streaming responses)
 const CHAT_COMPLETION_TIMEOUT = 120000
+const MAX_CHAT_COMPLETION_RETRY_ATTEMPTS = 3
+const INITIAL_CHAT_COMPLETION_RETRY_DELAY_MS = 500
+const MAX_CHAT_COMPLETION_RETRY_DELAY_MS = 8000
+const RETRYABLE_RESPONSE_STATUSES = new Set([429, 500, 502, 503, 504])
+const RETRYABLE_NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+])
 const CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
 type CopilotErrorBody = { error?: { code?: string; message?: string } }
 
@@ -258,6 +270,53 @@ function getRateLimitResetAt(response: Response): number | undefined {
   }
 
   return undefined
+}
+
+function getRetryBackoffDelay(attempt: number): number {
+  const delay =
+    INITIAL_CHAT_COMPLETION_RETRY_DELAY_MS * Math.pow(2, attempt - 1)
+  const jitter = delay * 0.2 * (Math.random() - 0.5)
+  return Math.min(
+    Math.max(Math.round(delay + jitter), 0),
+    MAX_CHAT_COMPLETION_RETRY_DELAY_MS,
+  )
+}
+
+function getRetryDelayMs(attempt: number, response?: Response): number {
+  if (response) {
+    const retryAt = getRateLimitResetAt(response)
+    if (retryAt !== undefined) {
+      return Math.min(
+        Math.max(retryAt - Date.now(), 0),
+        MAX_CHAT_COMPLETION_RETRY_DELAY_MS,
+      )
+    }
+  }
+  return getRetryBackoffDelay(attempt)
+}
+
+function isRetryableRequestError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const code = (error as { code?: string }).code
+  if (code && RETRYABLE_NETWORK_CODES.has(code)) {
+    return true
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    return (
+      error.name === "AbortError"
+      || error.name === "TimeoutError"
+      || message.includes("timeout")
+      || message.includes("network")
+      || message.includes("fetch failed")
+    )
+  }
+
+  return false
 }
 
 async function parseCopilotErrorBody(
@@ -570,6 +629,67 @@ async function parseSuccessfulCompletion(
   return (await response.json()) as ChatCompletionResponse
 }
 
+async function sendRequestWithRetry(params: {
+  model: string
+  sendRequest: (requestPayload: ChatCompletionsPayload) => Promise<Response>
+  requestPayload: ChatCompletionsPayload
+}): Promise<Response> {
+  const { model, sendRequest, requestPayload } = params
+  let lastError: unknown
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_CHAT_COMPLETION_RETRY_ATTEMPTS;
+    attempt++
+  ) {
+    try {
+      const response = await sendRequest(requestPayload)
+
+      if (
+        !RETRYABLE_RESPONSE_STATUSES.has(response.status)
+        || attempt === MAX_CHAT_COMPLETION_RETRY_ATTEMPTS
+      ) {
+        return response
+      }
+
+      const delayMs = getRetryDelayMs(attempt, response)
+      const message =
+        `Transient upstream status ${response.status} for model `
+        + `"${model}". Retrying (${attempt}/${MAX_CHAT_COMPLETION_RETRY_ATTEMPTS}) in ${delayMs}ms.`
+      consola.warn(message)
+      logEmitter.log("warn", message)
+      if (delayMs > 0) {
+        await sleep(delayMs)
+      }
+    } catch (error) {
+      lastError = error
+
+      if (
+        !isRetryableRequestError(error)
+        || attempt === MAX_CHAT_COMPLETION_RETRY_ATTEMPTS
+      ) {
+        throw error
+      }
+
+      const delayMs = getRetryDelayMs(attempt)
+      const reason = error instanceof Error ? error.message : String(error)
+      const message =
+        `Transient upstream request error for model "${model}": `
+        + `${reason}. Retrying (${attempt}/${MAX_CHAT_COMPLETION_RETRY_ATTEMPTS}) in ${delayMs}ms.`
+      consola.warn(message)
+      logEmitter.log("warn", message)
+      if (delayMs > 0) {
+        await sleep(delayMs)
+      }
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError
+  }
+  throw new Error("Failed to create chat completions after retries")
+}
+
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
 ) => {
@@ -613,7 +733,11 @@ export const createChatCompletions = async (
       timeout: CHAT_COMPLETION_TIMEOUT,
     })
 
-  const response = await sendRequest(normalizedPayload)
+  const response = await sendRequestWithRetry({
+    model: normalizedPayload.model,
+    sendRequest,
+    requestPayload: normalizedPayload,
+  })
 
   if (!response.ok) {
     const errorBody = await parseCopilotErrorBody(response)
@@ -630,7 +754,11 @@ export const createChatCompletions = async (
       consola.warn(message)
       logEmitter.log("warn", message)
 
-      const fallbackResponse = await sendRequest(fallbackPayload)
+      const fallbackResponse = await sendRequestWithRetry({
+        model: fallbackPayload.model,
+        sendRequest,
+        requestPayload: fallbackPayload,
+      })
       if (!fallbackResponse.ok) {
         return handleFailedCompletion({
           response: fallbackResponse,
