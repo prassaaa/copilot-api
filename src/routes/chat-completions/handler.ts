@@ -38,11 +38,12 @@ import {
   createInvalidPayloadError,
   readAndNormalizePayload,
 } from "./request-payload"
+import { convertToStreamChunks } from "./stream-chunks"
 import {
   denormalizeRequestToolCallIds,
+  extractChunkInfo,
   normalizeResponseToolCallIds,
   normalizeStreamChunkData,
-  extractChunkInfo,
 } from "./tool-call-ids"
 
 interface CompletionContext {
@@ -217,6 +218,7 @@ interface StreamState {
 async function processStreamChunks(
   response: AsyncIterable<{ event?: string; data?: string; id?: unknown }>,
   stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
+  model: string,
 ): Promise<StreamState> {
   let doneSent = false
   let outputTokens = 0
@@ -227,10 +229,24 @@ async function processStreamChunks(
     consola.debug("Streaming chunk:", JSON.stringify(chunk))
 
     if (chunk.event === "ping") {
+      const keepAliveChunk: ChatCompletionChunk = {
+        id: "chatcmpl-keepalive",
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: null,
+            logprobs: null,
+          },
+        ],
+      }
+      await stream.writeSSE({ data: JSON.stringify(keepAliveChunk) })
       continue
     }
 
-    // Track tool_calls and finish_reason for summary logging
     if (chunk.data && chunk.data !== "[DONE]") {
       const info = extractChunkInfo(chunk.data)
       if (info.hasToolCalls) hasToolCalls = true
@@ -243,9 +259,6 @@ async function processStreamChunks(
       doneSent = true
     }
 
-    // OpenAI SSE spec for chat completions does NOT use named events.
-    // Forwarding non-standard event names (e.g. from Copilot API) causes
-    // clients like Cursor to silently ignore all chunks.
     await stream.writeSSE({
       data: normalizedChunk.data,
       id: typeof chunk.id === "string" ? chunk.id : undefined,
@@ -260,7 +273,6 @@ async function processStreamChunks(
     }
   }
 
-  // Summary log — critical for debugging tool call issues
   if (!doneSent) {
     consola.warn("Stream ended without [DONE] marker")
     logEmitter.log(
@@ -277,10 +289,6 @@ async function processStreamChunks(
   return { doneSent, outputTokens }
 }
 
-/**
- * Convert a non-streaming response to SSE chunks when the upstream returns
- * a non-streaming response despite `stream=true`.  Records cost and history.
- */
 async function sendConvertedStreamChunks(
   response: ChatCompletionResponse,
   stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
@@ -317,10 +325,6 @@ async function sendConvertedStreamChunks(
   )
 }
 
-/**
- * Write error information to an SSE stream so clients like Cursor can display
- * the error and stop instead of retrying / looping.
- */
 async function writeStreamError(
   stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
   ctx: CompletionContext,
@@ -361,65 +365,63 @@ async function writeStreamError(
   await stream.writeSSE({ data: "[DONE]" })
 }
 
-/**
- * Attempt the upstream API call *before* committing to an SSE response.
- * If the call fails we can still return a proper HTTP error (e.g. 402/429)
- * which clients like Cursor handle correctly.  Once `streamSSE()` starts the
- * HTTP status is locked to 200 and errors can only be signalled inside the
- * event stream — Cursor ignores those and retries, causing loops.
- */
-async function handleStreamingResponse(
-  c: Context,
-  ctx: CompletionContext,
-): Promise<Response> {
-  consola.debug("Streaming response")
-  const upstreamAbortController = new AbortController()
-  const requestSignal = c.req.raw.signal
+function attachAbortFromRequest(
+  requestSignal: AbortSignal,
+  upstreamAbortController: AbortController,
+): void {
   if (requestSignal.aborted) {
     upstreamAbortController.abort()
-  } else {
-    requestSignal.addEventListener(
-      "abort",
-      () => upstreamAbortController.abort(),
-      { once: true },
-    )
+    return
   }
+  requestSignal.addEventListener(
+    "abort",
+    () => upstreamAbortController.abort(),
+    { once: true },
+  )
+}
 
-  // Make the upstream call BEFORE committing to SSE.
-  // If this throws (quota, auth, etc.) the error propagates to the caller
-  // which returns a proper HTTP error via forwardError.
-  const response = await createChatCompletions(ctx.payload, {
-    signal: upstreamAbortController.signal,
-  })
-  usageStats.recordRequest(ctx.payload.model)
-
-  // Non-streaming response received despite stream=true — convert to SSE.
-  if (isNonStreaming(response)) {
-    return streamSSE(c, async (stream) => {
-      stream.onAbort(() => upstreamAbortController.abort())
-      try {
-        await sendConvertedStreamChunks(response, stream, ctx)
-      } catch (error) {
-        if (upstreamAbortController.signal.aborted) {
-          logEmitter.log(
-            "debug",
-            `Chat completion stream aborted by client: model=${ctx.payload.model}`,
-          )
-          return
-        }
-        throw error
+function streamConvertedResponse(params: {
+  c: Context
+  ctx: CompletionContext
+  response: ChatCompletionResponse
+  upstreamAbortController: AbortController
+}): Response {
+  const { c, ctx, response, upstreamAbortController } = params
+  return streamSSE(c, async (stream) => {
+    stream.onAbort(() => upstreamAbortController.abort())
+    try {
+      await sendConvertedStreamChunks(response, stream, ctx)
+    } catch (error) {
+      if (upstreamAbortController.signal.aborted) {
+        logEmitter.log(
+          "debug",
+          `Chat completion stream aborted by client: model=${ctx.payload.model}`,
+        )
+        return
       }
-    })
-  }
+      throw error
+    }
+  })
+}
 
-  // Upstream returned a proper stream — pipe it through SSE.
+function streamUpstreamResponse(params: {
+  c: Context
+  ctx: CompletionContext
+  response: AsyncIterable<{ event?: string; data?: string; id?: unknown }>
+  upstreamAbortController: AbortController
+}): Response {
+  const { c, ctx, response, upstreamAbortController } = params
   return streamSSE(c, async (stream) => {
     let doneSent = false
     let streamOutputTokens = 0
     stream.onAbort(() => upstreamAbortController.abort())
 
     try {
-      const result = await processStreamChunks(response, stream)
+      const result = await processStreamChunks(
+        response,
+        stream,
+        ctx.payload.model,
+      )
       doneSent = result.doneSent
       streamOutputTokens = result.outputTokens
 
@@ -484,6 +486,35 @@ async function handleStreamingResponse(
   })
 }
 
+async function handleStreamingResponse(
+  c: Context,
+  ctx: CompletionContext,
+): Promise<Response> {
+  consola.debug("Streaming response")
+  const upstreamAbortController = new AbortController()
+  attachAbortFromRequest(c.req.raw.signal, upstreamAbortController)
+
+  const response = await createChatCompletions(ctx.payload, {
+    signal: upstreamAbortController.signal,
+  })
+  usageStats.recordRequest(ctx.payload.model)
+
+  if (isNonStreaming(response)) {
+    return streamConvertedResponse({
+      c,
+      ctx,
+      response,
+      upstreamAbortController,
+    })
+  }
+  return streamUpstreamResponse({
+    c,
+    ctx,
+    response,
+    upstreamAbortController,
+  })
+}
+
 function sanitizeMessages(
   payload: ChatCompletionsPayload,
 ): ChatCompletionsPayload {
@@ -493,7 +524,6 @@ function sanitizeMessages(
     )
   }
   const sanitizedMessages = payload.messages.map((msg) => {
-    // Only sanitize system and developer role messages
     if (msg.role !== "system" && msg.role !== "developer") {
       return msg
     }
@@ -907,102 +937,3 @@ export async function handleCompletion(c: Context) {
 const isNonStreaming = (
   response: Awaited<ReturnType<typeof createChatCompletions>>,
 ): response is ChatCompletionResponse => Object.hasOwn(response, "choices")
-
-/**
- * Convert a non-streaming ChatCompletionResponse to multiple streaming chunks
- * that follow the OpenAI SSE spec. The spec requires:
- * 1. First chunk: role only in delta, finish_reason: null
- * 2. Content/tool_calls chunks: content or tool_call data, finish_reason: null
- * 3. Final chunk: empty delta, finish_reason set, usage data
- *
- * This is needed when the client requests stream=true but the upstream API
- * returns a non-streaming response. Clients like Cursor expect properly
- * sequenced `chat.completion.chunk` objects.
- */
-function convertToStreamChunks(
-  response: ChatCompletionResponse,
-): Array<ChatCompletionChunk> {
-  const chunks: Array<ChatCompletionChunk> = []
-  const base = {
-    id: response.id,
-    object: "chat.completion.chunk" as const,
-    created: response.created,
-    model: response.model,
-    system_fingerprint: response.system_fingerprint,
-  }
-
-  // Chunk 1: role only
-  chunks.push({
-    ...base,
-    choices: response.choices.map((choice) => ({
-      index: choice.index,
-      delta: { role: choice.message.role },
-      finish_reason: null,
-      logprobs: null,
-    })),
-  })
-
-  // Chunk 2: content and/or tool_calls
-  for (const choice of response.choices) {
-    if (choice.message.content) {
-      chunks.push({
-        ...base,
-        choices: [
-          {
-            index: choice.index,
-            delta: { content: choice.message.content },
-            finish_reason: null,
-            logprobs: choice.logprobs,
-          },
-        ],
-      })
-    }
-
-    if (choice.message.tool_calls?.length) {
-      for (const [tcIndex, tc] of choice.message.tool_calls.entries()) {
-        chunks.push({
-          ...base,
-          choices: [
-            {
-              index: choice.index,
-              delta: {
-                tool_calls: [
-                  {
-                    index: tcIndex,
-                    id: tc.id,
-                    type: tc.type,
-                    function: tc.function,
-                  },
-                ],
-              },
-              finish_reason: null,
-              logprobs: null,
-            },
-          ],
-        })
-      }
-    }
-  }
-
-  // Final chunk: empty delta with finish_reason and usage
-  chunks.push({
-    ...base,
-    choices: response.choices.map((choice) => ({
-      index: choice.index,
-      delta: {},
-      finish_reason: choice.finish_reason,
-      logprobs: null,
-    })),
-    usage:
-      response.usage ?
-        {
-          prompt_tokens: response.usage.prompt_tokens,
-          completion_tokens: response.usage.completion_tokens,
-          total_tokens: response.usage.total_tokens,
-          prompt_tokens_details: response.usage.prompt_tokens_details,
-        }
-      : undefined,
-  })
-
-  return chunks
-}
