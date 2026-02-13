@@ -215,42 +215,58 @@ interface StreamState {
   outputTokens: number
 }
 
+async function writeKeepAlive(
+  stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
+  responseId: string | null,
+  model: string,
+): Promise<boolean> {
+  if (!responseId) return true
+  const chunk: ChatCompletionChunk = {
+    id: responseId,
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [{ index: 0, delta: {}, finish_reason: null, logprobs: null }],
+  }
+  try {
+    await stream.writeSSE({ data: JSON.stringify(chunk) })
+    return true
+  } catch {
+    consola.warn("Failed to write keep-alive, client may have disconnected")
+    return false
+  }
+}
+
 async function processStreamChunks(
   response: AsyncIterable<{ event?: string; data?: string; id?: unknown }>,
   stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
-  model: string,
+  options: { model: string; progress: { hasToolCalls: boolean } },
 ): Promise<StreamState> {
+  const { model, progress } = options
   let doneSent = false
   let outputTokens = 0
   let hasToolCalls = false
   let lastFinishReason: string | null = null
+  let lastResponseId: string | null = null
 
   for await (const chunk of response) {
     consola.debug("Streaming chunk:", JSON.stringify(chunk))
 
     if (chunk.event === "ping") {
-      const keepAliveChunk: ChatCompletionChunk = {
-        id: "chatcmpl-keepalive",
-        object: "chat.completion.chunk",
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [
-          {
-            index: 0,
-            delta: {},
-            finish_reason: null,
-            logprobs: null,
-          },
-        ],
-      }
-      await stream.writeSSE({ data: JSON.stringify(keepAliveChunk) })
+      // Keep-alive skips itself when responseId is null (not yet seen).
+      const ok = await writeKeepAlive(stream, lastResponseId, model)
+      if (!ok) break
       continue
     }
 
     if (chunk.data && chunk.data !== "[DONE]") {
       const info = extractChunkInfo(chunk.data)
-      if (info.hasToolCalls) hasToolCalls = true
+      if (info.hasToolCalls) {
+        hasToolCalls = true
+        progress.hasToolCalls = true
+      }
       if (info.finishReason) lastFinishReason = info.finishReason
+      lastResponseId ??= info.responseId
     }
 
     const normalizedChunk = normalizeStreamChunkData(chunk.data ?? "")
@@ -259,10 +275,15 @@ async function processStreamChunks(
       doneSent = true
     }
 
-    await stream.writeSSE({
-      data: normalizedChunk.data,
-      id: typeof chunk.id === "string" ? chunk.id : undefined,
-    })
+    try {
+      await stream.writeSSE({
+        data: normalizedChunk.data,
+        id: typeof chunk.id === "string" ? chunk.id : undefined,
+      })
+    } catch {
+      consola.warn("Failed to write SSE chunk, client may have disconnected")
+      break
+    }
 
     if (normalizedChunk.completionTokens !== null) {
       outputTokens = normalizedChunk.completionTokens
@@ -328,24 +349,32 @@ async function sendConvertedStreamChunks(
 async function writeStreamError(
   stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
   ctx: CompletionContext,
-  error: unknown,
+  opts: { error: unknown; hasToolCalls?: boolean },
 ): Promise<void> {
-  const errorMessage = error instanceof Error ? error.message : String(error)
-  const errorContentChunk: ChatCompletionChunk = {
-    id: "chatcmpl-error",
-    object: "chat.completion.chunk",
-    created: Math.floor(Date.now() / 1000),
-    model: ctx.payload.model,
-    choices: [
-      {
-        index: 0,
-        delta: { content: `\n\n[Error: ${errorMessage}]` },
-        finish_reason: null,
-        logprobs: null,
-      },
-    ],
+  const errorMessage =
+    opts.error instanceof Error ? opts.error.message : String(opts.error)
+
+  // When tool calls were being streamed, injecting a content delta corrupts
+  // the stream state — clients accumulating tool_call deltas would see an
+  // unexpected content field and may treat the tool call as incomplete or
+  // trigger invalid-argument errors and retry loops.
+  if (!opts.hasToolCalls) {
+    const errorContentChunk: ChatCompletionChunk = {
+      id: "chatcmpl-error",
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      model: ctx.payload.model,
+      choices: [
+        {
+          index: 0,
+          delta: { content: `\n\n[Error: ${errorMessage}]` },
+          finish_reason: null,
+          logprobs: null,
+        },
+      ],
+    }
+    await stream.writeSSE({ data: JSON.stringify(errorContentChunk) })
   }
-  await stream.writeSSE({ data: JSON.stringify(errorContentChunk) })
 
   const errorStopChunk: ChatCompletionChunk = {
     id: "chatcmpl-error",
@@ -356,7 +385,7 @@ async function writeStreamError(
       {
         index: 0,
         delta: {},
-        finish_reason: "stop",
+        finish_reason: opts.hasToolCalls ? "tool_calls" : "stop",
         logprobs: null,
       },
     ],
@@ -406,7 +435,10 @@ function streamConvertedResponse(params: {
           error instanceof Error ? error.message : String(error),
         )
         try {
-          await writeStreamError(stream, ctx, error)
+          await writeStreamError(stream, ctx, {
+            error,
+            hasToolCalls: hasToolCallResponse(response),
+          })
         } catch {
           // Client disconnected, nothing to do
         }
@@ -415,7 +447,10 @@ function streamConvertedResponse(params: {
     async (error, stream) => {
       consola.error("Unhandled stream error (converted):", error.message)
       try {
-        await writeStreamError(stream, ctx, error)
+        await writeStreamError(stream, ctx, {
+          error,
+          hasToolCalls: hasToolCallResponse(response),
+        })
       } catch {
         // Client disconnected
       }
@@ -430,6 +465,7 @@ function streamUpstreamResponse(params: {
   upstreamAbortController: AbortController
 }): Response {
   const { c, ctx, response, upstreamAbortController } = params
+  const streamProgress = { hasToolCalls: false }
   return streamSSE(
     c,
     async (stream) => {
@@ -438,11 +474,10 @@ function streamUpstreamResponse(params: {
       stream.onAbort(() => upstreamAbortController.abort())
 
       try {
-        const result = await processStreamChunks(
-          response,
-          stream,
-          ctx.payload.model,
-        )
+        const result = await processStreamChunks(response, stream, {
+          model: ctx.payload.model,
+          progress: streamProgress,
+        })
         doneSent = result.doneSent
         streamOutputTokens = result.outputTokens
 
@@ -495,7 +530,10 @@ function streamUpstreamResponse(params: {
 
         if (!doneSent) {
           try {
-            await writeStreamError(stream, ctx, error)
+            await writeStreamError(stream, ctx, {
+              error,
+              hasToolCalls: streamProgress.hasToolCalls,
+            })
           } catch (writeErr) {
             consola.warn(
               "Failed to write stream error (client disconnected):",
@@ -508,7 +546,10 @@ function streamUpstreamResponse(params: {
     async (error, stream) => {
       consola.error("Unhandled stream error (upstream):", error.message)
       try {
-        await writeStreamError(stream, ctx, error)
+        await writeStreamError(stream, ctx, {
+          error,
+          hasToolCalls: streamProgress.hasToolCalls,
+        })
       } catch {
         // Client disconnected
       }

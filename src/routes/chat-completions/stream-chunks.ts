@@ -1,7 +1,76 @@
 import type {
   ChatCompletionChunk,
   ChatCompletionResponse,
+  ToolCall,
 } from "~/services/copilot/create-chat-completions"
+
+const TOOL_CALL_ARGS_CHUNK_SIZE = 512
+
+function appendToolCallStreamChunks(
+  chunks: Array<ChatCompletionChunk>,
+  base: Pick<
+    ChatCompletionChunk,
+    "id" | "object" | "created" | "model" | "system_fingerprint"
+  >,
+  options: { choiceIndex: number; toolCalls: Array<ToolCall> },
+): void {
+  const { choiceIndex, toolCalls } = options
+  for (const [tcIndex, tc] of toolCalls.entries()) {
+    // Header chunk: introduces the tool call with id, type, and name
+    chunks.push({
+      ...base,
+      choices: [
+        {
+          index: choiceIndex,
+          delta: {
+            tool_calls: [
+              {
+                index: tcIndex,
+                id: tc.id,
+                type: tc.type,
+                function: { name: tc.function.name, arguments: "" },
+              },
+            ],
+          },
+          finish_reason: null,
+          logprobs: null,
+        },
+      ],
+    })
+
+    // Stream arguments incrementally to match real OpenAI streaming behavior
+    const args = tc.function.arguments
+    for (
+      let offset = 0;
+      offset < args.length;
+      offset += TOOL_CALL_ARGS_CHUNK_SIZE
+    ) {
+      chunks.push({
+        ...base,
+        choices: [
+          {
+            index: choiceIndex,
+            delta: {
+              tool_calls: [
+                {
+                  index: tcIndex,
+                  function: {
+                    arguments: args.slice(
+                      offset,
+                      offset + TOOL_CALL_ARGS_CHUNK_SIZE,
+                    ),
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+            logprobs: null,
+          },
+        ],
+      })
+    }
+  }
+}
 
 export function convertToStreamChunks(
   response: ChatCompletionResponse,
@@ -41,28 +110,10 @@ export function convertToStreamChunks(
     }
 
     if (choice.message.tool_calls?.length) {
-      for (const [tcIndex, tc] of choice.message.tool_calls.entries()) {
-        chunks.push({
-          ...base,
-          choices: [
-            {
-              index: choice.index,
-              delta: {
-                tool_calls: [
-                  {
-                    index: tcIndex,
-                    id: tc.id,
-                    type: tc.type,
-                    function: tc.function,
-                  },
-                ],
-              },
-              finish_reason: null,
-              logprobs: null,
-            },
-          ],
-        })
-      }
+      appendToolCallStreamChunks(chunks, base, {
+        choiceIndex: choice.index,
+        toolCalls: choice.message.tool_calls,
+      })
     }
   }
 

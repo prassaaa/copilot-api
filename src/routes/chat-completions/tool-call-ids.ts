@@ -290,6 +290,7 @@ export function normalizeStreamChunkData(data: string): NormalizedStreamChunk {
 export function extractChunkInfo(data: string): {
   hasToolCalls: boolean
   finishReason: string | null
+  responseId: string | null
 } {
   try {
     const parsed = JSON.parse(data) as ChatCompletionChunk
@@ -299,8 +300,8 @@ export function extractChunkInfo(data: string): {
       if (choice.delta.tool_calls) hasToolCalls = true
       if (choice.finish_reason) finishReason = choice.finish_reason
     }
-    return { hasToolCalls, finishReason }
+    return { hasToolCalls, finishReason, responseId: parsed.id || null }
   } catch {
-    return { hasToolCalls: false, finishReason: null }
+    return { hasToolCalls: false, finishReason: null, responseId: null }
   }
 }
