@@ -305,6 +305,13 @@ document.addEventListener("alpine:init", () => {
         console.error("Auth check failed:", error)
         this.auth.authenticated = false
         this.auth.passwordRequired = true
+        // Only show toast if not during initial page load
+        if (!this.auth.checking) {
+          this.showToast(
+            "Failed to check authentication status",
+            "error"
+          )
+        }
       } finally {
         this.auth.checking = false
       }
@@ -319,6 +326,13 @@ document.addEventListener("alpine:init", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: this.auth.password }),
         })
+        
+        // Handle network errors
+        if (!response.ok && response.status >= 500) {
+          this.showToast("Server error. Please try again later.", "error")
+          return
+        }
+
         const data = await response.json()
 
         if (response.status === 401 || data.status === "error") {
@@ -336,8 +350,18 @@ document.addEventListener("alpine:init", () => {
           await this.checkVersion()
           this.startVersionCheckPolling()
         }
-      } catch {
-        this.showToast("Login failed. Please try again.", "error")
+      } catch (error) {
+        console.error("Login error:", error)
+        // Handle different types of errors
+        let errorMessage = "Login failed. Please try again."
+        
+        if (error.name === "TypeError" && error.message.includes("fetch")) {
+          errorMessage = "Cannot connect to server. Please check your connection."
+        } else if (error.message) {
+          errorMessage = error.message
+        }
+        
+        this.showToast(errorMessage, "error")
       } finally {
         this.loading = false
       }
