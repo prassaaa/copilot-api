@@ -51,13 +51,38 @@ interface HistoryEntryParams {
   error?: string
 }
 
+/**
+ * Map of normalized tool call IDs to their original IDs from the Copilot API.
+ * This ensures lossless round-trip: normalize on response, restore on request.
+ * Uses LRU-style eviction to prevent unbounded growth.
+ */
+const toolCallIdMap = new Map<string, string>()
+const TOOL_CALL_ID_MAP_MAX_SIZE = 10000
+
+function pruneToolCallIdMap(): void {
+  if (toolCallIdMap.size <= TOOL_CALL_ID_MAP_MAX_SIZE) return
+  // Delete oldest entries (first inserted) to stay under limit
+  const excess = toolCallIdMap.size - TOOL_CALL_ID_MAP_MAX_SIZE + 1000
+  const iterator = toolCallIdMap.keys()
+  for (let i = 0; i < excess; i++) {
+    const key = iterator.next().value
+    if (key !== undefined) toolCallIdMap.delete(key)
+  }
+}
+
 function normalizeToolCallId(id: string): string {
   if (id.startsWith("call_")) {
     return id
   }
 
   const safe = id.replaceAll(/[^\w-]/g, "_")
-  return `call_${safe}`
+  const normalized = `call_${safe}`
+
+  // Store mapping so we can restore the original ID later
+  toolCallIdMap.set(normalized, id)
+  pruneToolCallIdMap()
+
+  return normalized
 }
 
 /**
@@ -71,13 +96,14 @@ function denormalizeToolCallId(id: string): string {
     return id
   }
 
-  // Strip the `call_` prefix we added
-  const inner = id.slice(5)
+  // Look up the original ID from our mapping for lossless round-trip
+  const original = toolCallIdMap.get(id)
+  if (original) {
+    return original
+  }
 
-  // Reverse the underscore-escaping: restore dots in IDs like "toolu_abc.123"
-  // But since we can't perfectly reverse arbitrary escaping, just return
-  // the inner part. The Copilot API generated the original ID without `call_`.
-  return inner
+  // Fallback: strip the `call_` prefix (best-effort for IDs we didn't map)
+  return id.slice(5)
 }
 
 /**
@@ -390,15 +416,19 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
       usageStats.recordRequest(ctx.payload.model)
 
       if (isNonStreaming(response)) {
-        // Convert non-streaming response to streaming chunk format
+        // Convert non-streaming response to properly sequenced streaming chunks
         // so clients like Cursor can parse it correctly.
-        const chunk = convertToStreamChunk(response)
-        const normalizedChunk = normalizeStreamChunkData(JSON.stringify(chunk))
-        await stream.writeSSE({ data: normalizedChunk.data })
-        await stream.writeSSE({ data: "[DONE]" })
-        if (normalizedChunk.completionTokens !== null) {
-          streamOutputTokens = normalizedChunk.completionTokens
+        const chunks = convertToStreamChunks(response)
+        for (const chunk of chunks) {
+          const normalizedChunk = normalizeStreamChunkData(
+            JSON.stringify(chunk),
+          )
+          await stream.writeSSE({ data: normalizedChunk.data })
+          if (normalizedChunk.completionTokens !== null) {
+            streamOutputTokens = normalizedChunk.completionTokens
+          }
         }
+        await stream.writeSSE({ data: "[DONE]" })
         return
       }
 
@@ -440,20 +470,25 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
         error: error instanceof Error ? error.message : String(error),
       })
 
-      // Send error as a regular data event (not named event) so clients can parse it
-      await stream.writeSSE({
-        data: JSON.stringify({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Stream error occurred",
-            type: "stream_error",
-          },
-        }),
-      })
-
-      // Always send [DONE] to properly terminate the stream,
-      // otherwise clients like Cursor will hang waiting for it.
+      // Send a valid ChatCompletionChunk with finish_reason so clients like
+      // Cursor properly terminate instead of retrying. Non-standard error
+      // JSON (without id/object/choices) causes clients to misparse and loop.
       if (!doneSent) {
+        const errorChunk: ChatCompletionChunk = {
+          id: "chatcmpl-error",
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: ctx.payload.model,
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        }
+        await stream.writeSSE({ data: JSON.stringify(errorChunk) })
         await stream.writeSSE({ data: "[DONE]" })
       }
     }
@@ -791,35 +826,90 @@ const isNonStreaming = (
 ): response is ChatCompletionResponse => Object.hasOwn(response, "choices")
 
 /**
- * Convert a non-streaming ChatCompletionResponse to a streaming chunk format.
+ * Convert a non-streaming ChatCompletionResponse to multiple streaming chunks
+ * that follow the OpenAI SSE spec. The spec requires:
+ * 1. First chunk: role only in delta, finish_reason: null
+ * 2. Content/tool_calls chunks: content or tool_call data, finish_reason: null
+ * 3. Final chunk: empty delta, finish_reason set, usage data
+ *
  * This is needed when the client requests stream=true but the upstream API
- * returns a non-streaming response. Clients like Cursor expect
- * `chat.completion.chunk` objects with `delta` fields, not `message` fields.
+ * returns a non-streaming response. Clients like Cursor expect properly
+ * sequenced `chat.completion.chunk` objects.
  */
-function convertToStreamChunk(
+function convertToStreamChunks(
   response: ChatCompletionResponse,
-): ChatCompletionChunk {
-  return {
+): Array<ChatCompletionChunk> {
+  const chunks: Array<ChatCompletionChunk> = []
+  const base = {
     id: response.id,
-    object: "chat.completion.chunk",
+    object: "chat.completion.chunk" as const,
     created: response.created,
     model: response.model,
+    system_fingerprint: response.system_fingerprint,
+  }
+
+  // Chunk 1: role only
+  chunks.push({
+    ...base,
     choices: response.choices.map((choice) => ({
       index: choice.index,
-      delta: {
-        role: choice.message.role,
-        content: choice.message.content,
-        tool_calls: choice.message.tool_calls?.map((tc, index) => ({
-          index,
-          id: tc.id,
-          type: tc.type,
-          function: tc.function,
-        })),
-      },
-      finish_reason: choice.finish_reason,
-      logprobs: choice.logprobs,
+      delta: { role: choice.message.role },
+      finish_reason: null,
+      logprobs: null,
     })),
-    system_fingerprint: response.system_fingerprint,
+  })
+
+  // Chunk 2: content and/or tool_calls
+  for (const choice of response.choices) {
+    if (choice.message.content) {
+      chunks.push({
+        ...base,
+        choices: [
+          {
+            index: choice.index,
+            delta: { content: choice.message.content },
+            finish_reason: null,
+            logprobs: choice.logprobs,
+          },
+        ],
+      })
+    }
+
+    if (choice.message.tool_calls?.length) {
+      for (const [tcIndex, tc] of choice.message.tool_calls.entries()) {
+        chunks.push({
+          ...base,
+          choices: [
+            {
+              index: choice.index,
+              delta: {
+                tool_calls: [
+                  {
+                    index: tcIndex,
+                    id: tc.id,
+                    type: tc.type,
+                    function: tc.function,
+                  },
+                ],
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        })
+      }
+    }
+  }
+
+  // Final chunk: empty delta with finish_reason and usage
+  chunks.push({
+    ...base,
+    choices: response.choices.map((choice) => ({
+      index: choice.index,
+      delta: {},
+      finish_reason: choice.finish_reason,
+      logprobs: null,
+    })),
     usage:
       response.usage ?
         {
@@ -829,5 +919,7 @@ function convertToStreamChunk(
           prompt_tokens_details: response.usage.prompt_tokens_details,
         }
       : undefined,
-  }
+  })
+
+  return chunks
 }
