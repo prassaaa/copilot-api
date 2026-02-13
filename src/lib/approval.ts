@@ -10,6 +10,15 @@ export const awaitApproval = async () => {
   if (!response)
     throw new HTTPError(
       "Request rejected",
-      Response.json({ message: "Request rejected" }, { status: 403 }),
+      Response.json(
+        {
+          error: {
+            message: "Request rejected",
+            type: "invalid_request_error",
+            code: "request_rejected",
+          },
+        },
+        { status: 403 },
+      ),
     )
 }

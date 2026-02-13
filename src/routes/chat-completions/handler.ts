@@ -26,7 +26,6 @@ import {
   type ChatCompletionChunk,
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
-  type Message,
 } from "~/services/copilot/create-chat-completions"
 
 import {
@@ -45,6 +44,7 @@ import {
   normalizeResponseToolCallIds,
   normalizeStreamChunkData,
 } from "./tool-call-ids"
+import { truncateMessages } from "./truncate-messages"
 
 interface CompletionContext {
   startTime: number
@@ -387,21 +387,40 @@ function streamConvertedResponse(params: {
   upstreamAbortController: AbortController
 }): Response {
   const { c, ctx, response, upstreamAbortController } = params
-  return streamSSE(c, async (stream) => {
-    stream.onAbort(() => upstreamAbortController.abort())
-    try {
-      await sendConvertedStreamChunks(response, stream, ctx)
-    } catch (error) {
-      if (upstreamAbortController.signal.aborted) {
-        logEmitter.log(
-          "debug",
-          `Chat completion stream aborted by client: model=${ctx.payload.model}`,
+  return streamSSE(
+    c,
+    async (stream) => {
+      stream.onAbort(() => upstreamAbortController.abort())
+      try {
+        await sendConvertedStreamChunks(response, stream, ctx)
+      } catch (error) {
+        if (upstreamAbortController.signal.aborted) {
+          logEmitter.log(
+            "debug",
+            `Chat completion stream aborted by client: model=${ctx.payload.model}`,
+          )
+          return
+        }
+        consola.error(
+          "Error in converted stream:",
+          error instanceof Error ? error.message : String(error),
         )
-        return
+        try {
+          await writeStreamError(stream, ctx, error)
+        } catch {
+          // Client disconnected, nothing to do
+        }
       }
-      throw error
-    }
-  })
+    },
+    async (error, stream) => {
+      consola.error("Unhandled stream error (converted):", error.message)
+      try {
+        await writeStreamError(stream, ctx, error)
+      } catch {
+        // Client disconnected
+      }
+    },
+  )
 }
 
 function streamUpstreamResponse(params: {
@@ -411,79 +430,90 @@ function streamUpstreamResponse(params: {
   upstreamAbortController: AbortController
 }): Response {
   const { c, ctx, response, upstreamAbortController } = params
-  return streamSSE(c, async (stream) => {
-    let doneSent = false
-    let streamOutputTokens = 0
-    stream.onAbort(() => upstreamAbortController.abort())
+  return streamSSE(
+    c,
+    async (stream) => {
+      let doneSent = false
+      let streamOutputTokens = 0
+      stream.onAbort(() => upstreamAbortController.abort())
 
-    try {
-      const result = await processStreamChunks(
-        response,
-        stream,
-        ctx.payload.model,
-      )
-      doneSent = result.doneSent
-      streamOutputTokens = result.outputTokens
-
-      if (!doneSent) {
-        await stream.writeSSE({ data: "[DONE]" })
-      }
-
-      const finalOutputTokens =
-        streamOutputTokens || Math.round(ctx.inputTokens * 0.5)
-      const cost = costCalculator.record(
-        ctx.payload.model,
-        ctx.inputTokens,
-        finalOutputTokens,
-      )
-
-      recordHistoryEntry({
-        ctx,
-        outputTokens: finalOutputTokens,
-        cost: cost.totalCost,
-        status: "success",
-      })
-
-      logEmitter.log(
-        "success",
-        `Chat completion stream done: model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
-      )
-    } catch (error) {
-      if (upstreamAbortController.signal.aborted) {
-        logEmitter.log(
-          "debug",
-          `Chat completion stream aborted by client: model=${ctx.payload.model}`,
+      try {
+        const result = await processStreamChunks(
+          response,
+          stream,
+          ctx.payload.model,
         )
-        return
-      }
+        doneSent = result.doneSent
+        streamOutputTokens = result.outputTokens
 
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      consola.error("Mid-stream error:", errorMsg)
-      logEmitter.log(
-        "error",
-        `Stream interrupted: model=${ctx.payload.model}, error=${errorMsg}`,
-      )
+        if (!doneSent) {
+          await stream.writeSSE({ data: "[DONE]" })
+        }
 
-      recordHistoryEntry({
-        ctx,
-        outputTokens: streamOutputTokens,
-        cost: 0,
-        status: "error",
-        error: errorMsg,
-      })
+        const finalOutputTokens =
+          streamOutputTokens || Math.round(ctx.inputTokens * 0.5)
+        const cost = costCalculator.record(
+          ctx.payload.model,
+          ctx.inputTokens,
+          finalOutputTokens,
+        )
 
-      if (!doneSent) {
-        try {
-          await writeStreamError(stream, ctx, error)
-        } catch (writeErr) {
-          consola.warn(
-            "Failed to write stream error (client disconnected):",
-            writeErr instanceof Error ? writeErr.message : String(writeErr),
+        recordHistoryEntry({
+          ctx,
+          outputTokens: finalOutputTokens,
+          cost: cost.totalCost,
+          status: "success",
+        })
+
+        logEmitter.log(
+          "success",
+          `Chat completion stream done: model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
+        )
+      } catch (error) {
+        if (upstreamAbortController.signal.aborted) {
+          logEmitter.log(
+            "debug",
+            `Chat completion stream aborted by client: model=${ctx.payload.model}`,
           )
+          return
+        }
+
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        consola.error("Mid-stream error:", errorMsg)
+        logEmitter.log(
+          "error",
+          `Stream interrupted: model=${ctx.payload.model}, error=${errorMsg}`,
+        )
+
+        recordHistoryEntry({
+          ctx,
+          outputTokens: streamOutputTokens,
+          cost: 0,
+          status: "error",
+          error: errorMsg,
+        })
+
+        if (!doneSent) {
+          try {
+            await writeStreamError(stream, ctx, error)
+          } catch (writeErr) {
+            consola.warn(
+              "Failed to write stream error (client disconnected):",
+              writeErr instanceof Error ? writeErr.message : String(writeErr),
+            )
+          }
         }
       }
-    }
-  })
+    },
+    async (error, stream) => {
+      consola.error("Unhandled stream error (upstream):", error.message)
+      try {
+        await writeStreamError(stream, ctx, error)
+      } catch {
+        // Client disconnected
+      }
+    },
+  )
 }
 
 async function handleStreamingResponse(
@@ -580,246 +610,6 @@ function applyMaxTokensIfNeeded(
     consola.debug("Set max_tokens to:", maxTokens)
     return { ...payload, max_tokens: maxTokens }
   }
-  return payload
-}
-
-function isSystemOrDeveloper(msg: Message): boolean {
-  return msg.role === "system" || msg.role === "developer"
-}
-
-/**
- * Remove the oldest non-system message from the list, along with any
- * orphaned tool response messages if the removed message was an assistant
- * message with tool_calls.
- */
-function removeOldestWithToolCleanup(messages: Array<Message>): Array<Message> {
-  const [removed, ...rest] = messages
-  if (removed.role !== "assistant" || !removed.tool_calls?.length) {
-    // If removing a tool message, it is safe — the orphan cleanup pass below
-    // will take care of any remaining inconsistencies.
-    return rest
-  }
-
-  // Remove tool responses that belong to the removed assistant's tool_calls
-  const toolCallIds = new Set(removed.tool_calls.map((tc) => tc.id))
-  const firstNonTool = rest.findIndex(
-    (msg) =>
-      msg.role !== "tool"
-      || !msg.tool_call_id
-      || !toolCallIds.has(msg.tool_call_id),
-  )
-  return firstNonTool === -1 ? [] : rest.slice(firstNonTool)
-}
-
-/**
- * Remove orphaned messages after truncation:
- * 1. Tool messages whose tool_call_id has no matching assistant tool_calls
- * 2. Assistant messages with tool_calls whose tool results are missing
- *
- * Both cases confuse models and can cause them to re-issue tool calls (loops).
- *
- * After cleanup, also strips any leading tool/assistant-only messages so the
- * non-system portion always starts with a user message (required by most
- * models).
- */
-function removeOrphanedToolMessages(messages: Array<Message>): Array<Message> {
-  // Collect all tool_call IDs from assistant messages
-  const assistantToolCallIds = new Set<string>()
-  for (const msg of messages) {
-    if (msg.role === "assistant" && msg.tool_calls?.length) {
-      for (const tc of msg.tool_calls) {
-        assistantToolCallIds.add(tc.id)
-      }
-    }
-  }
-
-  // Collect all tool_call_ids referenced by tool messages
-  const toolResultIds = new Set<string>()
-  for (const msg of messages) {
-    if (msg.role === "tool" && msg.tool_call_id) {
-      toolResultIds.add(msg.tool_call_id)
-    }
-  }
-
-  const cleaned = messages
-    .map((msg) => {
-      // Strip tool_calls from assistant messages whose results are missing.
-      // Keep the message itself if it has text content (the model said something
-      // before issuing tool calls), otherwise mark for removal by returning null.
-      if (msg.role === "assistant" && msg.tool_calls?.length) {
-        const hasAllResults = msg.tool_calls.every((tc) =>
-          toolResultIds.has(tc.id),
-        )
-        if (!hasAllResults) {
-          if (msg.content) {
-            const { tool_calls: _, ...rest } = msg
-            return rest as Message
-          }
-          return null
-        }
-      }
-
-      // Remove tool messages that reference a tool_call_id with no assistant match
-      if (msg.role === "tool" && msg.tool_call_id) {
-        return assistantToolCallIds.has(msg.tool_call_id) ? msg : null
-      }
-
-      return msg
-    })
-    .filter((msg): msg is Message => msg !== null)
-
-  // Strip leading non-user messages (tool, assistant) so the conversation
-  // starts with a user message — many models reject conversations that begin
-  // with assistant or tool messages after truncation.
-  const firstUserIdx = cleaned.findIndex((m) => m.role === "user")
-  if (firstUserIdx > 0) {
-    return cleaned.slice(firstUserIdx)
-  }
-  return cleaned
-}
-
-async function computeInputTokens(
-  payload: ChatCompletionsPayload,
-  model: import("~/services/copilot/get-models").Model,
-): Promise<number | null> {
-  try {
-    const count = await getTokenCount(payload, model)
-    return count.input
-  } catch {
-    return null
-  }
-}
-
-/**
- * Truncate conversation messages when total token count exceeds the model's
- * prompt token limit. Uses max_prompt_tokens when available, otherwise falls
- * back to max_context_window_tokens (minus an output reserve). Preserves
- * system/developer messages and the most recent messages, removing oldest
- * non-system messages first.
- */
-/**
- * Resolve the effective prompt token limit for a model.
- *
- * Priority:
- * 1. `max_prompt_tokens` — explicit prompt limit from the API
- * 2. `max_context_window_tokens` minus a reserve for output tokens
- *
- * A 10 % reserve (min 4 096 tokens) is subtracted from the context window so
- * the model still has room to generate a response.
- */
-function resolvePromptTokenLimit(
-  limits:
-    | {
-        max_prompt_tokens?: number
-        max_context_window_tokens?: number
-        max_output_tokens?: number
-      }
-    | undefined,
-): number | null {
-  if (limits?.max_prompt_tokens) return limits.max_prompt_tokens
-
-  if (limits?.max_context_window_tokens) {
-    const contextWindow = limits.max_context_window_tokens
-    const outputReserve =
-      limits.max_output_tokens ?
-        Math.min(limits.max_output_tokens, Math.floor(contextWindow * 0.1))
-      : Math.max(4096, Math.floor(contextWindow * 0.1))
-    return contextWindow - outputReserve
-  }
-
-  return null
-}
-
-/**
- * Count trailing tool-call turn messages (the latest assistant + its tool
- * results) so that truncation never removes the turn the model is currently
- * responding to.  Cursor appends an assistant message with tool_calls and
- * the corresponding tool-result messages; if these get truncated the model
- * sees dangling tool_calls with no results and loops.
- */
-function countTrailingToolTurnMessages(messages: Array<Message>): number {
-  let count = 0
-  // Walk backward: expect tool messages first, then their assistant
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]
-    if (msg.role === "tool") {
-      count++
-    } else if (msg.role === "assistant" && msg.tool_calls?.length) {
-      count++
-      break // assistant is the start of this tool turn
-    } else {
-      break // hit a non-tool-turn message
-    }
-  }
-  return count
-}
-
-async function truncateMessages(
-  payload: ChatCompletionsPayload,
-): Promise<ChatCompletionsPayload> {
-  const selectedModel = state.models?.data.find((m) => m.id === payload.model)
-  if (!selectedModel) return payload
-
-  const maxPromptTokens = resolvePromptTokenLimit(
-    selectedModel.capabilities.limits,
-  )
-  if (!maxPromptTokens) return payload
-
-  const initialInput = await computeInputTokens(payload, selectedModel)
-  if (initialInput === null || initialInput <= maxPromptTokens) return payload
-
-  const systemMessages = payload.messages.filter((m) => isSystemOrDeveloper(m))
-  let nonSystemMessages = payload.messages.filter(
-    (m) => !isSystemOrDeveloper(m),
-  )
-
-  // Always preserve the most recent tool-call turn so the model can see
-  // the tool results it is expected to summarize.
-  const trailingProtected = countTrailingToolTurnMessages(nonSystemMessages)
-  const minKeep = Math.max(2, trailingProtected)
-
-  const originalCount = nonSystemMessages.length
-  let currentInput = initialInput
-
-  // Iteratively remove the oldest non-system messages until under limit.
-  // Preserve at least `minKeep` messages so the active tool turn stays intact.
-  while (currentInput > maxPromptTokens && nonSystemMessages.length > minKeep) {
-    nonSystemMessages = removeOldestWithToolCleanup(nonSystemMessages)
-
-    const truncatedPayload = {
-      ...payload,
-      messages: [...systemMessages, ...nonSystemMessages],
-    }
-    const newInput = await computeInputTokens(truncatedPayload, selectedModel)
-    if (newInput === null) break
-    currentInput = newInput
-  }
-
-  const removedCount = originalCount - nonSystemMessages.length
-  if (removedCount > 0) {
-    // Clean up any orphaned tool messages or assistant messages with
-    // dangling tool_calls that lost their corresponding tool results.
-    nonSystemMessages = removeOrphanedToolMessages(nonSystemMessages)
-
-    // If cleanup removed everything, keep at least the last user message
-    // from the original payload so the model has something to respond to.
-    if (nonSystemMessages.length === 0) {
-      const lastUser = payload.messages.findLast((m) => m.role === "user")
-      if (lastUser) {
-        nonSystemMessages = [lastUser]
-      }
-    }
-
-    consola.warn(
-      `Truncated ${removedCount} messages to fit within ${maxPromptTokens} prompt token limit (${initialInput} → ${currentInput} tokens)`,
-    )
-    logEmitter.log(
-      "warn",
-      `Truncated ${removedCount} messages: ${initialInput} → ${currentInput} tokens (limit: ${maxPromptTokens})`,
-    )
-    return { ...payload, messages: [...systemMessages, ...nonSystemMessages] }
-  }
-
   return payload
 }
 

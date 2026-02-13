@@ -332,8 +332,7 @@ function isRetryableRequestError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
     return (
-      error.name === "AbortError"
-      || error.name === "TimeoutError"
+      error.name === "TimeoutError"
       || message.includes("timeout")
       || message.includes("network")
       || message.includes("fetch failed")
