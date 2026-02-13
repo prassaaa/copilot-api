@@ -349,21 +349,38 @@ async function writeStreamError(
   await stream.writeSSE({ data: "[DONE]" })
 }
 
-function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
+/**
+ * Attempt the upstream API call *before* committing to an SSE response.
+ * If the call fails we can still return a proper HTTP error (e.g. 402/429)
+ * which clients like Cursor handle correctly.  Once `streamSSE()` starts the
+ * HTTP status is locked to 200 and errors can only be signalled inside the
+ * event stream — Cursor ignores those and retries, causing loops.
+ */
+async function handleStreamingResponse(
+  c: Context,
+  ctx: CompletionContext,
+): Promise<Response> {
   consola.debug("Streaming response")
+
+  // Make the upstream call BEFORE committing to SSE.
+  // If this throws (quota, auth, etc.) the error propagates to the caller
+  // which returns a proper HTTP error via forwardError.
+  const response = await createChatCompletions(ctx.payload)
+  usageStats.recordRequest(ctx.payload.model)
+
+  // Non-streaming response received despite stream=true — convert to SSE.
+  if (isNonStreaming(response)) {
+    return streamSSE(c, async (stream) => {
+      await sendConvertedStreamChunks(response, stream, ctx)
+    })
+  }
+
+  // Upstream returned a proper stream — pipe it through SSE.
   return streamSSE(c, async (stream) => {
     let doneSent = false
     let streamOutputTokens = 0
 
     try {
-      const response = await createChatCompletions(ctx.payload)
-      usageStats.recordRequest(ctx.payload.model)
-
-      if (isNonStreaming(response)) {
-        await sendConvertedStreamChunks(response, stream, ctx)
-        return
-      }
-
       const result = await processStreamChunks(response, stream)
       doneSent = result.doneSent
       streamOutputTokens = result.outputTokens
