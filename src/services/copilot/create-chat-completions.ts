@@ -318,6 +318,12 @@ function isRetryableRequestError(error: unknown): boolean {
     return false
   }
 
+  // AbortError means the client disconnected or the request was intentionally
+  // cancelled — never retry these since subsequent attempts would also abort.
+  if (error instanceof Error && error.name === "AbortError") {
+    return false
+  }
+
   const code = (error as { code?: string }).code
   if (code && RETRYABLE_NETWORK_CODES.has(code)) {
     return true
