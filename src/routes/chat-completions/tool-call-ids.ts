@@ -4,17 +4,10 @@ import type {
   ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
 
-/**
- * LRU map of normalized tool call IDs to originals for lossless round-trip.
- *
- * Uses access-time tracking so actively-used mappings (from ongoing agentic
- * sessions) are never evicted while stale ones are.  Every read (denormalize)
- * refreshes the entry, keeping it alive as long as the conversation references
- * it.
- */
 const toolCallIdMap = new Map<string, string>()
 const TOOL_CALL_ID_MAP_MAX_SIZE = 10000
 const TOOL_CALL_ID_MAP_PRUNE_COUNT = 1000
+const ENCODED_TOOL_CALL_ID_PREFIX = "call_x_"
 
 function touchToolCallId(normalized: string, original: string): void {
   // Map#delete + Map#set moves the entry to the end (newest).
@@ -41,8 +34,10 @@ export function normalizeToolCallId(id: string): string {
     return id
   }
 
-  const safe = id.replaceAll(/[^\w-]/g, "_")
-  const normalized = `call_${safe}`
+  // Use a deterministic reversible encoding so round-trip does not depend
+  // on in-memory state. This prevents stale/evicted map entries from breaking
+  // older tool_call_id references during long Cursor sessions.
+  const normalized = `${ENCODED_TOOL_CALL_ID_PREFIX}${Buffer.from(id, "utf8").toString("base64url")}`
 
   touchToolCallId(normalized, id)
   pruneToolCallIdMap()
@@ -50,9 +45,27 @@ export function normalizeToolCallId(id: string): string {
   return normalized
 }
 
+function decodeToolCallId(id: string): string | null {
+  if (!id.startsWith(ENCODED_TOOL_CALL_ID_PREFIX)) return null
+  const encoded = id.slice(ENCODED_TOOL_CALL_ID_PREFIX.length)
+  if (!encoded) return null
+  try {
+    const decoded = Buffer.from(encoded, "base64url").toString("utf8")
+    return decoded || null
+  } catch {
+    return null
+  }
+}
+
 function denormalizeToolCallId(id: string): string {
   if (!id.startsWith("call_")) {
     return id
+  }
+
+  const decoded = decodeToolCallId(id)
+  if (decoded) {
+    touchToolCallId(id, decoded)
+    return decoded
   }
 
   const original = toolCallIdMap.get(id)

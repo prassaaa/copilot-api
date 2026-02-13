@@ -93,6 +93,31 @@ describe("normalizeChatCompletionsPayload", () => {
     ])
   })
 
+  test("normalizes non-string tool call arguments", () => {
+    const normalized = normalizeChatCompletionsPayload({
+      model: "gpt-4.1",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool-1",
+              type: "function",
+              function: { name: "edit_file", arguments: { path: "a.ts" } },
+            },
+          ],
+        },
+      ],
+    })
+
+    const [assistant] = normalized.messages
+    expect(assistant.role).toBe("assistant")
+    expect(assistant.tool_calls?.[0]?.function.arguments).toBe(
+      '{"path":"a.ts"}',
+    )
+  })
+
   test("throws when messages is not an array", async () => {
     await expectInvalidPayload(
       { model: "gpt-4.1", messages: { role: "user", content: "Hello" } },

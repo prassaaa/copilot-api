@@ -85,6 +85,54 @@ function normalizeContent(
   }
 }
 
+function normalizeToolCallArguments(argumentsLike: unknown): string {
+  if (typeof argumentsLike === "string") {
+    return argumentsLike.length > 0 ? argumentsLike : "{}"
+  }
+  if (argumentsLike === undefined) return "{}"
+  try {
+    return JSON.stringify(argumentsLike)
+  } catch {
+    return "{}"
+  }
+}
+
+function normalizeToolCalls(toolCallsLike: unknown): Message["tool_calls"] {
+  if (!Array.isArray(toolCallsLike)) return undefined
+
+  const normalizedToolCalls = toolCallsLike
+    .map((toolCallLike) => {
+      if (!isRecord(toolCallLike) || !isRecord(toolCallLike.function)) {
+        return null
+      }
+
+      const id =
+        typeof toolCallLike.id === "string" && toolCallLike.id.length > 0 ?
+          toolCallLike.id
+        : `call_${crypto.randomUUID().replaceAll("-", "")}`
+      const name =
+        typeof toolCallLike.function.name === "string" ?
+          toolCallLike.function.name
+        : ""
+
+      return {
+        id,
+        type: "function" as const,
+        function: {
+          name,
+          arguments: normalizeToolCallArguments(
+            toolCallLike.function.arguments,
+          ),
+        },
+      }
+    })
+    .filter(
+      (toolCall): toolCall is NonNullable<typeof toolCall> => toolCall !== null,
+    )
+
+  return normalizedToolCalls.length > 0 ? normalizedToolCalls : undefined
+}
+
 function coerceMessage(messageLike: unknown): Message | null {
   if (typeof messageLike === "string") {
     return { role: "user", content: messageLike }
@@ -103,9 +151,7 @@ function coerceMessage(messageLike: unknown): Message | null {
   if (typeof messageLike.tool_call_id === "string") {
     message.tool_call_id = messageLike.tool_call_id
   }
-  if (Array.isArray(messageLike.tool_calls)) {
-    message.tool_calls = messageLike.tool_calls as Message["tool_calls"]
-  }
+  message.tool_calls = normalizeToolCalls(messageLike.tool_calls)
 
   return message
 }

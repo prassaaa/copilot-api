@@ -7,6 +7,7 @@ import type {
 
 import {
   denormalizeRequestToolCallIds,
+  normalizeToolCallId,
   normalizeResponseToolCallIds,
 } from "../src/routes/chat-completions/tool-call-ids"
 
@@ -104,6 +105,46 @@ describe("tool_call_id normalization", () => {
         {
           role: "tool",
           tool_call_id: normalizedId as string,
+          content: '{"ok":true}',
+        },
+      ],
+    }
+
+    const denormalized = denormalizeRequestToolCallIds(payload)
+    const assistantToolId = denormalized.messages[0]?.tool_calls?.[0]?.id
+    const toolMessageId =
+      denormalized.messages[1]?.role === "tool" ?
+        denormalized.messages[1].tool_call_id
+      : undefined
+
+    expect(assistantToolId).toBe(originalId)
+    expect(toolMessageId).toBe(originalId)
+  })
+
+  test("restores original IDs from deterministic encoded id", () => {
+    const originalId = "tool.id/legacy-123"
+    const encodedId = normalizeToolCallId(originalId)
+
+    const payload: ChatCompletionsPayload = {
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: encodedId,
+              type: "function",
+              function: {
+                name: "run_tool",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: encodedId,
           content: '{"ok":true}',
         },
       ],
