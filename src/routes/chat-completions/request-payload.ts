@@ -115,6 +115,7 @@ function parseMessagesField(messagesField: unknown): {
   invalid: boolean
 } {
   if (messagesField === undefined) return { messages: null, invalid: false }
+  if (messagesField === null) return { messages: null, invalid: false }
   if (!Array.isArray(messagesField)) return { messages: null, invalid: true }
 
   const messages: Array<Message> = []

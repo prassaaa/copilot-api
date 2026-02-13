@@ -63,6 +63,18 @@ describe("normalizeChatCompletionsPayload", () => {
     expect("input" in asRecord).toBe(false)
   })
 
+  test("treats null messages as missing and falls back to input", () => {
+    const normalized = normalizeChatCompletionsPayload({
+      input: "Run diagnostics",
+      messages: null,
+      model: "gpt-4.1",
+    })
+
+    expect(normalized.messages).toEqual([
+      { role: "user", content: "Run diagnostics" },
+    ])
+  })
+
   test("maps responses-style input array into chat messages", () => {
     const normalized = normalizeChatCompletionsPayload({
       model: "gpt-4.1",

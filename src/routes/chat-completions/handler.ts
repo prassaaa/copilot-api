@@ -34,7 +34,10 @@ import {
   preparePayload,
   sanitizeAnthropicFields,
 } from "./normalize-payload"
-import { readAndNormalizePayload } from "./request-payload"
+import {
+  createInvalidPayloadError,
+  readAndNormalizePayload,
+} from "./request-payload"
 import {
   denormalizeRequestToolCallIds,
   normalizeResponseToolCallIds,
@@ -484,6 +487,11 @@ async function handleStreamingResponse(
 function sanitizeMessages(
   payload: ChatCompletionsPayload,
 ): ChatCompletionsPayload {
+  if (!Array.isArray(payload.messages)) {
+    throw createInvalidPayloadError(
+      "Field `messages` is required and must be a non-empty array.",
+    )
+  }
   const sanitizedMessages = payload.messages.map((msg) => {
     // Only sanitize system and developer role messages
     if (msg.role !== "system" && msg.role !== "developer") {

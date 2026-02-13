@@ -33,6 +33,7 @@ import {
   translateToAnthropic,
   translateToOpenAI,
 } from "./non-stream-translation"
+import { readAndNormalizeAnthropicPayload } from "./request-payload"
 import { translateChunkToAnthropicEvents } from "./stream-translation"
 
 type OpenAIPayload = ReturnType<typeof translateToOpenAI>
@@ -348,7 +349,7 @@ export async function handleCompletion(c: Context) {
 
   await checkRateLimit(state)
 
-  const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
+  const anthropicPayload = await readAndNormalizeAnthropicPayload(c)
   consola.debug("Anthropic request payload:", JSON.stringify(anthropicPayload))
 
   const accountInfo = getAccountInfo()
