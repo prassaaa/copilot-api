@@ -17,7 +17,12 @@ export function normalizeToolCallArguments(argumentsLike: unknown): string {
         JSON.parse(repaired)
         return repaired
       } catch {
-        return "{}"
+        // Return the original string instead of discarding it as "{}".
+        // Silently replacing with "{}" corrupts the conversation history and
+        // causes model confusion / tool-call loops in agentic clients like
+        // Cursor when the model sees empty arguments for a tool call that
+        // previously had valid parameters.
+        return trimmed
       }
     }
   }
