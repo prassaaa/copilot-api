@@ -20,8 +20,16 @@ import {
   type CopilotErrorBody,
 } from "~/services/copilot/fallback-selection"
 
-// Timeout for chat completions (2 minutes for long streaming responses)
-const CHAT_COMPLETION_TIMEOUT = 120000
+function resolveChatCompletionTimeoutMs(): number {
+  const raw = process.env.CHAT_COMPLETION_TIMEOUT_MS
+  if (!raw) return 300000
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 300000
+  return parsed
+}
+
+// Timeout for chat completions (defaults to 5 minutes; configurable via env)
+const CHAT_COMPLETION_TIMEOUT = resolveChatCompletionTimeoutMs()
 const MAX_CHAT_COMPLETION_RETRY_ATTEMPTS = 3
 const INITIAL_CHAT_COMPLETION_RETRY_DELAY_MS = 500
 const MAX_CHAT_COMPLETION_RETRY_DELAY_MS = 8000
