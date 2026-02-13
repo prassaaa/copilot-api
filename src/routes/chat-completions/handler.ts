@@ -607,6 +607,30 @@ function resolvePromptTokenLimit(
   return null
 }
 
+/**
+ * Count trailing tool-call turn messages (the latest assistant + its tool
+ * results) so that truncation never removes the turn the model is currently
+ * responding to.  Cursor appends an assistant message with tool_calls and
+ * the corresponding tool-result messages; if these get truncated the model
+ * sees dangling tool_calls with no results and loops.
+ */
+function countTrailingToolTurnMessages(messages: Array<Message>): number {
+  let count = 0
+  // Walk backward: expect tool messages first, then their assistant
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === "tool") {
+      count++
+    } else if (msg.role === "assistant" && msg.tool_calls?.length) {
+      count++
+      break // assistant is the start of this tool turn
+    } else {
+      break // hit a non-tool-turn message
+    }
+  }
+  return count
+}
+
 async function truncateMessages(
   payload: ChatCompletionsPayload,
 ): Promise<ChatCompletionsPayload> {
@@ -626,12 +650,17 @@ async function truncateMessages(
     (m) => !isSystemOrDeveloper(m),
   )
 
+  // Always preserve the most recent tool-call turn so the model can see
+  // the tool results it is expected to summarize.
+  const trailingProtected = countTrailingToolTurnMessages(nonSystemMessages)
+  const minKeep = Math.max(2, trailingProtected)
+
   const originalCount = nonSystemMessages.length
   let currentInput = initialInput
 
-  // Iteratively remove the oldest non-system messages until under limit
-  // Keep at least the last 2 messages for context
-  while (currentInput > maxPromptTokens && nonSystemMessages.length > 2) {
+  // Iteratively remove the oldest non-system messages until under limit.
+  // Preserve at least `minKeep` messages so the active tool turn stays intact.
+  while (currentInput > maxPromptTokens && nonSystemMessages.length > minKeep) {
     nonSystemMessages = removeOldestWithToolCleanup(nonSystemMessages)
 
     const truncatedPayload = {
@@ -715,9 +744,19 @@ export async function handleCompletion(c: Context) {
     isPoolEnabledSync() ? (getCurrentAccount()?.login ?? null) : null
 
   const toolChoiceLabel = getToolChoiceLabel(payload.tool_choice)
+  const msgRoleCounts = payload.messages.reduce<Record<string, number>>(
+    (acc, m) => {
+      acc[m.role] = (acc[m.role] || 0) + 1
+      return acc
+    },
+    {},
+  )
+  const msgSummary = Object.entries(msgRoleCounts)
+    .map(([role, count]) => `${role}=${count}`)
+    .join(", ")
   logEmitter.log(
     "info",
-    `Chat completion request: model=${payload.model}, stream=${payload.stream ?? false}, tools=${payload.tools?.length ?? 0}, tool_choice=${toolChoiceLabel}${accountInfo ? `, account=${accountInfo}` : ""}`,
+    `Chat completion request: model=${payload.model}, stream=${payload.stream ?? false}, tools=${payload.tools?.length ?? 0}, tool_choice=${toolChoiceLabel}, messages=[${msgSummary}]${accountInfo ? `, account=${accountInfo}` : ""}`,
   )
 
   const inputTokens = await calculateInputTokens(payload)
