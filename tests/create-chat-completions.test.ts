@@ -49,6 +49,18 @@ function createModel(id: string): Model {
   }
 }
 
+function setStateModels(models: typeof state.models): void {
+  Object.assign(state, { models })
+}
+
+function setFallbackEnv(value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env.FALLBACK
+    return
+  }
+  Object.assign(process.env, { FALLBACK: value })
+}
+
 test("sets X-Initiator to agent if tool/assistant present", async () => {
   const payload: ChatCompletionsPayload = {
     messages: [
@@ -289,6 +301,91 @@ test("falls back to lower claude-sonnet tier before other families", async () =>
     expect((result as { model?: string }).model).toBe("claude-sonnet-4")
   } finally {
     ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
+  }
+})
+
+test("falls back on capacity-limited response when fallback is enabled", async () => {
+  const previousFetch = (globalThis as unknown as { fetch: typeof fetch }).fetch
+  const previousModels = state.models
+  const previousFallbackEnv = process.env.FALLBACK
+  const calledModels: Array<string> = []
+  let primaryModelAttempts = 0
+
+  const fallbackFetchMock = mock(
+    (
+      _url: string,
+      opts: {
+        body?: string
+      },
+    ) => {
+      const requestBody = JSON.parse(opts.body ?? "{}") as { model?: string }
+      const model = requestBody.model ?? ""
+      calledModels.push(model)
+
+      if (model === "claude-opus-4.6") {
+        primaryModelAttempts++
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "resource_exhausted",
+              message: "upstream capacity exhausted",
+            },
+          }),
+          {
+            status: 429,
+            headers: {
+              "content-type": "application/json",
+              "retry-after": "0",
+            },
+          },
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          choices: [],
+          id: "fallback-capacity",
+          model: requestBody.model,
+          object: "chat.completion",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    },
+  )
+
+  // @ts-expect-error - Mock fetch doesn't implement all fetch properties
+  ;(globalThis as unknown as { fetch: typeof fetch }).fetch = fallbackFetchMock
+  setStateModels({
+    data: [
+      createModel("claude-opus-4.6"),
+      createModel("claude-opus-4.5"),
+      createModel("claude-sonnet-4.5"),
+    ],
+    object: "list",
+  })
+  setFallbackEnv("true")
+
+  try {
+    const result = await createChatCompletions({
+      messages: [{ role: "user", content: "hi" }],
+      model: "claude-opus-4.6",
+    })
+
+    expect(primaryModelAttempts).toBe(3)
+    expect(calledModels).toEqual([
+      "claude-opus-4.6",
+      "claude-opus-4.6",
+      "claude-opus-4.6",
+      "claude-opus-4.5",
+    ])
+    expect((result as { model?: string }).model).toBe("claude-opus-4.5")
+  } finally {
+    ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
+    setStateModels(previousModels)
+    setFallbackEnv(previousFallbackEnv)
   }
 })
 

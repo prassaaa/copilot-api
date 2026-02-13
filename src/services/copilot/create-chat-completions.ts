@@ -15,6 +15,10 @@ import { logEmitter } from "~/lib/logger"
 import { sleep } from "~/lib/retry"
 import { state } from "~/lib/state"
 import { getActiveCopilotToken } from "~/lib/token"
+import {
+  findFallbackModelForFailedResponse,
+  type CopilotErrorBody,
+} from "~/services/copilot/fallback-selection"
 
 // Timeout for chat completions (2 minutes for long streaming responses)
 const CHAT_COMPLETION_TIMEOUT = 120000
@@ -30,7 +34,6 @@ const RETRYABLE_NETWORK_CODES = new Set([
   "EAI_AGAIN",
 ])
 const CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
-type CopilotErrorBody = { error?: { code?: string; message?: string } }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -331,17 +334,6 @@ async function parseCopilotErrorBody(
     // Ignore parse errors
   }
   return null
-}
-
-function isUnsupportedApiForModelError(
-  errorBody: CopilotErrorBody | null,
-): boolean {
-  const code = extractErrorCode(errorBody)
-  const message = extractErrorMessage(errorBody)
-  return (
-    code === "unsupported_api_for_model"
-    && message.includes(`${CHAT_COMPLETIONS_ENDPOINT} endpoint`)
-  )
 }
 
 function supportsChatCompletionsEndpoint(model: Model): boolean {
@@ -741,16 +733,23 @@ export const createChatCompletions = async (
 
   if (!response.ok) {
     const errorBody = await parseCopilotErrorBody(response)
-    const fallbackModel =
-      isUnsupportedApiForModelError(errorBody) ?
-        findChatCompletionsCompatibleFallback(normalizedPayload.model)
-      : null
+    const fallbackSelection = findFallbackModelForFailedResponse({
+      requestedModel: normalizedPayload.model,
+      response,
+      errorBody,
+      endpoint: CHAT_COMPLETIONS_ENDPOINT,
+      findCompatibleFallback: findChatCompletionsCompatibleFallback,
+    })
 
-    if (fallbackModel) {
-      const fallbackPayload = { ...normalizedPayload, model: fallbackModel }
+    if (fallbackSelection) {
+      const fallbackPayload = {
+        ...normalizedPayload,
+        model: fallbackSelection.model,
+      }
       const message =
-        `Model "${normalizedPayload.model}" is not compatible with `
-        + `${CHAT_COMPLETIONS_ENDPOINT}; retrying with "${fallbackModel}".`
+        fallbackSelection.reason === "unsupported-endpoint" ?
+          `Model "${normalizedPayload.model}" is not compatible with ${CHAT_COMPLETIONS_ENDPOINT}; retrying with "${fallbackSelection.model}".`
+        : `Model "${normalizedPayload.model}" is capacity-limited upstream; retrying with fallback "${fallbackSelection.model}".`
       consola.warn(message)
       logEmitter.log("warn", message)
 
