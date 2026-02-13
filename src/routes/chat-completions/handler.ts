@@ -376,6 +376,10 @@ async function writeStreamError(
     await stream.writeSSE({ data: JSON.stringify(errorContentChunk) })
   }
 
+  // Always use "stop" for error scenarios, never "tool_calls". The client
+  // may have received partial tool-call deltas with incomplete arguments;
+  // sending "tool_calls" would tell the client to execute them, leading to
+  // invalid-argument errors and agent loops.
   const errorStopChunk: ChatCompletionChunk = {
     id: "chatcmpl-error",
     object: "chat.completion.chunk",
@@ -385,7 +389,7 @@ async function writeStreamError(
       {
         index: 0,
         delta: {},
-        finish_reason: opts.hasToolCalls ? "tool_calls" : "stop",
+        finish_reason: "stop",
         logprobs: null,
       },
     ],
@@ -428,6 +432,13 @@ function streamConvertedResponse(params: {
             "debug",
             `Chat completion stream aborted by client: model=${ctx.payload.model}`,
           )
+          // Send [DONE] for clean termination so the client can
+          // immediately start a new request without "reconnecting".
+          try {
+            await stream.writeSSE({ data: "[DONE]" })
+          } catch {
+            // Expected — client already disconnected
+          }
           return
         }
         consola.error(
@@ -482,7 +493,13 @@ function streamUpstreamResponse(params: {
         streamOutputTokens = result.outputTokens
 
         if (!doneSent) {
-          await stream.writeSSE({ data: "[DONE]" })
+          try {
+            await stream.writeSSE({ data: "[DONE]" })
+            doneSent = true
+          } catch {
+            // Client disconnected — abort upstream to free resources
+            upstreamAbortController.abort()
+          }
         }
 
         const finalOutputTokens =
@@ -510,6 +527,15 @@ function streamUpstreamResponse(params: {
             "debug",
             `Chat completion stream aborted by client: model=${ctx.payload.model}`,
           )
+          // Send [DONE] for clean termination so the client can
+          // immediately start a new request without "reconnecting".
+          if (!doneSent) {
+            try {
+              await stream.writeSSE({ data: "[DONE]" })
+            } catch {
+              // Expected — client already disconnected
+            }
+          }
           return
         }
 
