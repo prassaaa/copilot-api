@@ -6,7 +6,6 @@ import { streamSSE, type SSEMessage } from "hono/streaming"
 import { getCurrentAccount, isPoolEnabledSync } from "~/lib/account-pool"
 import { awaitApproval } from "~/lib/approval"
 import { costCalculator } from "~/lib/cost-calculator"
-import { applyFallback } from "~/lib/fallback"
 import { logEmitter } from "~/lib/logger"
 import { notificationCenter } from "~/lib/notification-center"
 import { checkRateLimit } from "~/lib/rate-limit"
@@ -30,11 +29,13 @@ import {
   type Message,
 } from "~/services/copilot/create-chat-completions"
 
-interface StreamUsageChunk {
-  usage?: {
-    completion_tokens?: number
-  }
-}
+import { normalizeTools, preparePayload } from "./normalize-payload"
+import {
+  denormalizeRequestToolCallIds,
+  normalizeResponseToolCallIds,
+  normalizeStreamChunkData,
+  extractChunkInfo,
+} from "./tool-call-ids"
 
 interface CompletionContext {
   startTime: number
@@ -51,169 +52,10 @@ interface HistoryEntryParams {
   error?: string
 }
 
-/**
- * Map of normalized tool call IDs to their original IDs from the Copilot API.
- * This ensures lossless round-trip: normalize on response, restore on request.
- * Uses LRU-style eviction to prevent unbounded growth.
- */
-const toolCallIdMap = new Map<string, string>()
-const TOOL_CALL_ID_MAP_MAX_SIZE = 10000
-
-function pruneToolCallIdMap(): void {
-  if (toolCallIdMap.size <= TOOL_CALL_ID_MAP_MAX_SIZE) return
-  // Delete oldest entries (first inserted) to stay under limit
-  const excess = toolCallIdMap.size - TOOL_CALL_ID_MAP_MAX_SIZE + 1000
-  const iterator = toolCallIdMap.keys()
-  for (let i = 0; i < excess; i++) {
-    const key = iterator.next().value
-    if (key !== undefined) toolCallIdMap.delete(key)
-  }
-}
-
-function normalizeToolCallId(id: string): string {
-  if (id.startsWith("call_")) {
-    return id
-  }
-
-  const safe = id.replaceAll(/[^\w-]/g, "_")
-  const normalized = `call_${safe}`
-
-  // Store mapping so we can restore the original ID later
-  toolCallIdMap.set(normalized, id)
-  pruneToolCallIdMap()
-
-  return normalized
-}
-
-/**
- * Reverse the normalizeToolCallId transformation on incoming request messages.
- * When we add `call_` prefix to tool call IDs in responses, Cursor sends them
- * back with that prefix. We need to strip it before forwarding to Copilot API
- * so the IDs match what Copilot originally generated.
- */
-function denormalizeToolCallId(id: string): string {
-  if (!id.startsWith("call_")) {
-    return id
-  }
-
-  // Look up the original ID from our mapping for lossless round-trip
-  const original = toolCallIdMap.get(id)
-  if (original) {
-    return original
-  }
-
-  // Fallback: strip the `call_` prefix (best-effort for IDs we didn't map)
-  return id.slice(5)
-}
-
-/**
- * Denormalize tool call IDs in incoming request messages before sending
- * to Copilot API. This reverses the normalization we apply to responses,
- * ensuring round-trip consistency.
- */
-function denormalizeRequestToolCallIds(
-  payload: ChatCompletionsPayload,
-): ChatCompletionsPayload {
-  const messages = payload.messages.map((msg) => {
-    // Denormalize tool_call_id in tool role messages
-    if (msg.role === "tool" && msg.tool_call_id) {
-      const denormalized = denormalizeToolCallId(msg.tool_call_id)
-      if (denormalized !== msg.tool_call_id) {
-        return { ...msg, tool_call_id: denormalized }
-      }
-    }
-
-    // Denormalize tool_calls[].id in assistant role messages
-    if (msg.role === "assistant" && msg.tool_calls?.length) {
-      const denormalizedCalls = msg.tool_calls.map((tc) => {
-        const denormalized = denormalizeToolCallId(tc.id)
-        return denormalized !== tc.id ? { ...tc, id: denormalized } : tc
-      })
-      const originalCalls = msg.tool_calls
-      const hasChanges = denormalizedCalls.some(
-        (tc, i) => tc !== originalCalls[i],
-      )
-      if (hasChanges) {
-        return { ...msg, tool_calls: denormalizedCalls }
-      }
-    }
-
-    return msg
-  })
-
-  return { ...payload, messages }
-}
-
-function normalizeResponseToolCallIds(
-  response: ChatCompletionResponse,
-): ChatCompletionResponse {
-  const normalizedChoices = response.choices.map((choice) => {
-    const toolCalls = choice.message.tool_calls
-    if (!toolCalls || toolCalls.length === 0) {
-      return choice
-    }
-
-    return {
-      ...choice,
-      message: {
-        ...choice.message,
-        tool_calls: toolCalls.map((toolCall) => ({
-          ...toolCall,
-          id: normalizeToolCallId(toolCall.id),
-        })),
-      },
-    }
-  })
-
-  return {
-    ...response,
-    choices: normalizedChoices,
-  }
-}
-
 function hasToolCallResponse(response: ChatCompletionResponse): boolean {
   return response.choices.some(
     (choice) => (choice.message.tool_calls?.length ?? 0) > 0,
   )
-}
-
-interface NormalizedStreamChunk {
-  completionTokens: number | null
-  data: string
-}
-
-function normalizeStreamChunkData(data: string): NormalizedStreamChunk {
-  if (!data || data === "[DONE]") {
-    return { completionTokens: null, data }
-  }
-
-  try {
-    const parsed = JSON.parse(data) as ChatCompletionChunk
-    for (const choice of parsed.choices) {
-      if (!choice.delta.tool_calls) {
-        continue
-      }
-
-      for (const toolCall of choice.delta.tool_calls) {
-        if (!toolCall.id) {
-          continue
-        }
-
-        const normalizedId = normalizeToolCallId(toolCall.id)
-        toolCall.id = normalizedId
-      }
-    }
-
-    return {
-      completionTokens: parsed.usage?.completion_tokens ?? null,
-      data: JSON.stringify(parsed),
-    }
-  } catch {
-    return {
-      completionTokens: tryParseStreamUsage(data),
-      data,
-    }
-  }
 }
 
 function getCacheKeyOptions(payload: ChatCompletionsPayload) {
@@ -359,34 +201,6 @@ function handleNonStreamingResponse(
   return c.json(normalizedResponse)
 }
 
-function tryParseStreamUsage(data: string): number | null {
-  try {
-    const parsed = JSON.parse(data) as StreamUsageChunk
-    return parsed.usage?.completion_tokens ?? null
-  } catch {
-    return null
-  }
-}
-
-function logChunkDebugInfo(data: string): void {
-  try {
-    const parsed = JSON.parse(data) as ChatCompletionChunk
-    for (const choice of parsed.choices) {
-      if (choice.delta.tool_calls) {
-        consola.debug(
-          "Tool call in chunk:",
-          JSON.stringify(choice.delta.tool_calls),
-        )
-      }
-      if (choice.finish_reason) {
-        consola.debug("Finish reason:", choice.finish_reason)
-      }
-    }
-  } catch {
-    // ignore parse errors for debug logging
-  }
-}
-
 interface StreamState {
   doneSent: boolean
   outputTokens: number
@@ -398,6 +212,8 @@ async function processStreamChunks(
 ): Promise<StreamState> {
   let doneSent = false
   let outputTokens = 0
+  let hasToolCalls = false
+  let lastFinishReason: string | null = null
 
   for await (const chunk of response) {
     consola.debug("Streaming chunk:", JSON.stringify(chunk))
@@ -406,9 +222,11 @@ async function processStreamChunks(
       continue
     }
 
-    // Log tool_calls and finish_reason for debugging agentic flows
+    // Track tool_calls and finish_reason for summary logging
     if (chunk.data && chunk.data !== "[DONE]") {
-      logChunkDebugInfo(chunk.data)
+      const info = extractChunkInfo(chunk.data)
+      if (info.hasToolCalls) hasToolCalls = true
+      if (info.finishReason) lastFinishReason = info.finishReason
     }
 
     const normalizedChunk = normalizeStreamChunkData(chunk.data ?? "")
@@ -433,6 +251,12 @@ async function processStreamChunks(
       break
     }
   }
+
+  // Summary log — critical for debugging tool call issues
+  logEmitter.log(
+    "debug",
+    `Stream summary: finish_reason=${lastFinishReason}, has_tool_calls=${hasToolCalls}`,
+  )
 
   return { doneSent, outputTokens }
 }
@@ -556,81 +380,6 @@ function sanitizeMessages(
   })
 
   return { ...payload, messages: sanitizedMessages }
-}
-
-/**
- * Normalize tools and tool_choice to OpenAI standard format.
- * Some clients (e.g. Cursor) send tools without the `type: "function"` wrapper.
- */
-function normalizeTools(
-  payload: ChatCompletionsPayload,
-): ChatCompletionsPayload {
-  let tools = payload.tools
-  let toolChoice = payload.tool_choice
-
-  if (tools && tools.length > 0) {
-    tools = tools.map((tool) => {
-      const raw = tool as unknown as Record<string, unknown>
-
-      // Already in correct format
-      if (raw.type === "function" && raw.function) {
-        return tool
-      }
-
-      // Tool sent without wrapper — has name/parameters at top level
-      if (raw.name || raw.parameters) {
-        return {
-          type: "function" as const,
-          function: {
-            name: (raw.name as string) || "",
-            description: raw.description as string | undefined,
-            parameters:
-              raw.parameters ? (raw.parameters as Record<string, unknown>) : {},
-          },
-        }
-      }
-
-      return tool
-    })
-  }
-
-  if (
-    toolChoice
-    && typeof toolChoice === "object"
-    && !("function" in toolChoice)
-  ) {
-    const raw = toolChoice as Record<string, unknown>
-    if (raw.type === "auto" || raw.type === "none" || raw.type === "required") {
-      toolChoice = raw.type
-    } else if (raw.type === "function" && raw.name) {
-      toolChoice = {
-        type: "function" as const,
-        function: { name: raw.name as string },
-      }
-    }
-  }
-
-  if (tools !== payload.tools || toolChoice !== payload.tool_choice) {
-    return { ...payload, tools, tool_choice: toolChoice }
-  }
-  return payload
-}
-
-function preparePayload(
-  payload: ChatCompletionsPayload,
-): ChatCompletionsPayload {
-  const fallbackResult = applyFallback(payload.model)
-  if (fallbackResult.didFallback) {
-    consola.info(
-      `Model fallback: ${fallbackResult.originalModel} → ${fallbackResult.model}`,
-    )
-    logEmitter.log(
-      "warn",
-      `Model fallback: ${fallbackResult.originalModel} → ${fallbackResult.model}`,
-    )
-    return { ...payload, model: fallbackResult.model }
-  }
-  return payload
 }
 
 async function calculateInputTokens(
@@ -788,11 +537,9 @@ async function executeCompletion(
 }
 
 /**
- * When tools are provided, inject a developer message that instructs the model
- * to actually use the tools via function calling (tool_calls), not describe
- * actions in plain text. This is needed because the Copilot API backend may
- * inject a system prompt that steers the model toward conversational responses,
- * causing it to ignore tool definitions from the client.
+ * Inject a developer message instructing the model to use tools via tool_calls,
+ * not plain text. Needed because Copilot API may inject a system prompt that
+ * steers the model toward conversational responses.
  */
 function injectToolUseInstruction(
   payload: ChatCompletionsPayload,
@@ -812,7 +559,7 @@ function injectToolUseInstruction(
       + "would do.",
   }
 
-  // Insert after existing system/developer messages, before user messages
+  // Insert after system/developer messages, before user messages
   const systemMessages = payload.messages.filter((m) => isSystemOrDeveloper(m))
   const otherMessages = payload.messages.filter((m) => !isSystemOrDeveloper(m))
 

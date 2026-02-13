@@ -4,6 +4,20 @@ import { forwardError } from "~/lib/error"
 import { state } from "~/lib/state"
 import { cacheModels } from "~/lib/utils"
 
+const CUS_PREFIX = "cus-"
+
+function toModelEntry(id: string, vendor: string, name: string) {
+  return {
+    id,
+    object: "model",
+    type: "model",
+    created: 0,
+    created_at: new Date(0).toISOString(),
+    owned_by: vendor,
+    display_name: name,
+  }
+}
+
 export const modelRoutes = new Hono()
 
 modelRoutes.get("/", async (c) => {
@@ -13,15 +27,11 @@ modelRoutes.get("/", async (c) => {
       await cacheModels()
     }
 
-    const models = state.models?.data.map((model) => ({
-      id: model.id,
-      object: "model",
-      type: "model",
-      created: 0, // No date available from source
-      created_at: new Date(0).toISOString(), // No date available from source
-      owned_by: model.vendor,
-      display_name: model.name,
-    }))
+    const models =
+      state.models?.data.flatMap((model) => [
+        toModelEntry(model.id, model.vendor, model.name),
+        toModelEntry(`${CUS_PREFIX}${model.id}`, model.vendor, model.name),
+      ]) ?? []
 
     return c.json({
       object: "list",
@@ -39,14 +49,16 @@ modelRoutes.get("/:id", async (c) => {
       await cacheModels()
     }
 
-    const modelId = c.req.param("id")
+    const rawId = c.req.param("id")
+    const modelId =
+      rawId.startsWith(CUS_PREFIX) ? rawId.slice(CUS_PREFIX.length) : rawId
     const model = state.models?.data.find((m) => m.id === modelId)
 
     if (!model) {
       return c.json(
         {
           error: {
-            message: `Model '${modelId}' not found`,
+            message: `Model '${rawId}' not found`,
             type: "invalid_request_error",
           },
         },
@@ -54,15 +66,7 @@ modelRoutes.get("/:id", async (c) => {
       )
     }
 
-    return c.json({
-      id: model.id,
-      object: "model",
-      type: "model",
-      created: 0,
-      created_at: new Date(0).toISOString(),
-      owned_by: model.vendor,
-      display_name: model.name,
-    })
+    return c.json(toModelEntry(rawId, model.vendor, model.name))
   } catch (error) {
     return await forwardError(c, error)
   }
