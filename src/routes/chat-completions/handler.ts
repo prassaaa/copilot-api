@@ -236,6 +236,14 @@ function getCacheKeyOptions(payload: ChatCompletionsPayload) {
   }
 }
 
+function getToolChoiceLabel(
+  toolChoice: ChatCompletionsPayload["tool_choice"],
+): string {
+  if (typeof toolChoice === "string") return toolChoice
+  if (toolChoice) return "function"
+  return "none"
+}
+
 function recordHistoryEntry(params: HistoryEntryParams): void {
   const { ctx, outputTokens, cost, status, error } = params
   requestHistory.record({
@@ -360,6 +368,25 @@ function tryParseStreamUsage(data: string): number | null {
   }
 }
 
+function logChunkDebugInfo(data: string): void {
+  try {
+    const parsed = JSON.parse(data) as ChatCompletionChunk
+    for (const choice of parsed.choices) {
+      if (choice.delta.tool_calls) {
+        consola.debug(
+          "Tool call in chunk:",
+          JSON.stringify(choice.delta.tool_calls),
+        )
+      }
+      if (choice.finish_reason) {
+        consola.debug("Finish reason:", choice.finish_reason)
+      }
+    }
+  } catch {
+    // ignore parse errors for debug logging
+  }
+}
+
 interface StreamState {
   doneSent: boolean
   outputTokens: number
@@ -377,6 +404,11 @@ async function processStreamChunks(
 
     if (chunk.event === "ping") {
       continue
+    }
+
+    // Log tool_calls and finish_reason for debugging agentic flows
+    if (chunk.data && chunk.data !== "[DONE]") {
+      logChunkDebugInfo(chunk.data)
     }
 
     const normalizedChunk = normalizeStreamChunkData(chunk.data ?? "")
@@ -776,9 +808,10 @@ export async function handleCompletion(c: Context) {
   const accountInfo =
     isPoolEnabledSync() ? (getCurrentAccount()?.login ?? null) : null
 
+  const toolChoiceLabel = getToolChoiceLabel(payload.tool_choice)
   logEmitter.log(
     "info",
-    `Chat completion request: model=${payload.model}, stream=${payload.stream ?? false}${accountInfo ? `, account=${accountInfo}` : ""}`,
+    `Chat completion request: model=${payload.model}, stream=${payload.stream ?? false}, tools=${payload.tools?.length ?? 0}, tool_choice=${toolChoiceLabel}${accountInfo ? `, account=${accountInfo}` : ""}`,
   )
 
   const inputTokens = await calculateInputTokens(payload)

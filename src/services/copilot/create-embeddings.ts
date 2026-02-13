@@ -15,7 +15,7 @@ export const createEmbeddings = async (payload: EmbeddingRequest) => {
     `${copilotBaseUrl(state)}/embeddings`,
     {
       method: "POST",
-      headers: copilotHeaders(state, false, token),
+      headers: copilotHeaders(state, { token }),
       body: JSON.stringify(payload),
       timeout: EMBEDDINGS_TIMEOUT,
     },

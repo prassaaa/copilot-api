@@ -590,9 +590,12 @@ export const createChatCompletions = async (
   const isAgentCall =
     lastMessage?.role === "assistant" || lastMessage?.role === "tool"
 
+  // Detect if this request includes tool definitions for agentic mode
+  const hasTools = (normalizedPayload.tools?.length ?? 0) > 0
+
   // Build headers and add X-Initiator
   const headers: Record<string, string> = {
-    ...copilotHeaders(state, enableVision, token),
+    ...copilotHeaders(state, { vision: enableVision, token, hasTools }),
     "X-Initiator": isAgentCall ? "agent" : "user",
   }
 
