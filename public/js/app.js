@@ -314,11 +314,17 @@ document.addEventListener("alpine:init", () => {
     async login() {
       this.loading = true
       try {
-        const { data } = await this.requestJson("/api/login", {
+        const response = await fetch("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: this.auth.password }),
         })
+        const data = await response.json()
+
+        if (response.status === 401 || data.status === "error") {
+          this.showToast(data.error || "Invalid password", "error")
+          return
+        }
 
         if (data.status === "ok") {
           this.auth.authenticated = true
@@ -329,11 +335,9 @@ document.addEventListener("alpine:init", () => {
           this.connectNotificationStream()
           await this.checkVersion()
           this.startVersionCheckPolling()
-        } else {
-          this.showToast(data.error || "Login failed", "error")
         }
       } catch {
-        this.showToast("Login failed", "error")
+        this.showToast("Login failed. Please try again.", "error")
       } finally {
         this.loading = false
       }
