@@ -143,7 +143,7 @@ describe("normalizeChatCompletionsPayload", () => {
     )
   })
 
-  test("falls back to empty object for unparsable tool call arguments", () => {
+  test("preserves original string for unparsable tool call arguments", () => {
     const normalized = normalizeChatCompletionsPayload({
       model: "gpt-4.1",
       messages: [
@@ -161,8 +161,11 @@ describe("normalizeChatCompletionsPayload", () => {
       ],
     })
 
+    // Unparsable arguments are preserved as-is instead of being silently
+    // replaced with "{}". Discarding them corrupts conversation history and
+    // causes tool-call loops in agentic clients like Cursor.
     const [assistant] = normalized.messages
-    expect(assistant.tool_calls?.[0]?.function.arguments).toBe("{}")
+    expect(assistant.tool_calls?.[0]?.function.arguments).toBe("{bad-json")
   })
 
   test("does not include tool_calls property when input has none", () => {
