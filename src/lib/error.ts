@@ -118,8 +118,17 @@ export async function forwardError(c: Context, error: unknown) {
 
   if (error instanceof HTTPError) {
     forwardRelevantErrorHeaders(c, error.response)
-    const errorText = await error.response.text()
-    const normalized = normalizeHttpError(errorText)
+    let normalized: ReturnType<typeof normalizeHttpError>
+    try {
+      const errorText = await error.response.text()
+      normalized = normalizeHttpError(errorText)
+    } catch {
+      // Response body may already be consumed (e.g. by parseCopilotErrorBody).
+      normalized = {
+        message: error.message || "Unknown upstream error",
+        type: "error",
+      }
+    }
     consola.error("HTTP error:", normalized)
     return c.json(
       {

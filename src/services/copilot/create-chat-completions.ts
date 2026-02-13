@@ -575,7 +575,9 @@ async function handleFailedCompletion(params: {
   const accountInfo = getAccountInfoForError()
   const errorBody = await parseCopilotErrorBody(response)
 
-  consola.error("Failed to create chat completions", response)
+  consola.error(
+    `Failed to create chat completions: ${response.status} ${response.statusText}`,
+  )
   consola.error(`Account: ${accountInfo}`)
   consola.error(`Model requested: ${payload.model}`)
 

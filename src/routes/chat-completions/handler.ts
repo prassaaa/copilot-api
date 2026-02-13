@@ -403,7 +403,11 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
       })
 
       if (!doneSent) {
-        await writeStreamError(stream, ctx, error)
+        try {
+          await writeStreamError(stream, ctx, error)
+        } catch {
+          // Client already disconnected — nothing we can do.
+        }
       }
     }
   })
