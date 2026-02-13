@@ -528,6 +528,10 @@ function removeOldestWithToolCleanup(messages: Array<Message>): Array<Message> {
  * 2. Assistant messages with tool_calls whose tool results are missing
  *
  * Both cases confuse models and can cause them to re-issue tool calls (loops).
+ *
+ * After cleanup, also strips any leading tool/assistant-only messages so the
+ * non-system portion always starts with a user message (required by most
+ * models).
  */
 function removeOrphanedToolMessages(messages: Array<Message>): Array<Message> {
   // Collect all tool_call IDs from assistant messages
@@ -548,7 +552,7 @@ function removeOrphanedToolMessages(messages: Array<Message>): Array<Message> {
     }
   }
 
-  return messages
+  const cleaned = messages
     .map((msg) => {
       // Strip tool_calls from assistant messages whose results are missing.
       // Keep the message itself if it has text content (the model said something
@@ -574,6 +578,15 @@ function removeOrphanedToolMessages(messages: Array<Message>): Array<Message> {
       return msg
     })
     .filter((msg): msg is Message => msg !== null)
+
+  // Strip leading non-user messages (tool, assistant) so the conversation
+  // starts with a user message — many models reject conversations that begin
+  // with assistant or tool messages after truncation.
+  const firstUserIdx = cleaned.findIndex((m) => m.role === "user")
+  if (firstUserIdx > 0) {
+    return cleaned.slice(firstUserIdx)
+  }
+  return cleaned
 }
 
 async function computeInputTokens(
@@ -698,6 +711,15 @@ async function truncateMessages(
     // Clean up any orphaned tool messages or assistant messages with
     // dangling tool_calls that lost their corresponding tool results.
     nonSystemMessages = removeOrphanedToolMessages(nonSystemMessages)
+
+    // If cleanup removed everything, keep at least the last user message
+    // from the original payload so the model has something to respond to.
+    if (nonSystemMessages.length === 0) {
+      const lastUser = payload.messages.findLast((m) => m.role === "user")
+      if (lastUser) {
+        nonSystemMessages = [lastUser]
+      }
+    }
 
     consola.warn(
       `Truncated ${removedCount} messages to fit within ${maxPromptTokens} prompt token limit (${initialInput} → ${currentInput} tokens)`,
