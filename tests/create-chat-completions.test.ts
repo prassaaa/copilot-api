@@ -511,3 +511,53 @@ test("uses stable copilot integration header for tool calls", async () => {
     fetchHost.fetch = previousFetch
   }
 })
+
+test("retries transient upstream status before succeeding", async () => {
+  const fetchHost = globalThis as unknown as { fetch: typeof fetch }
+  const previousFetch = fetchHost.fetch
+  let callCount = 0
+
+  const transientFetchMock = mock(() => {
+    callCount++
+    if (callCount === 1) {
+      return new Response(
+        JSON.stringify({
+          error: { message: "temporarily overloaded" },
+        }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": "0",
+          },
+        },
+      )
+    }
+
+    return new Response(
+      JSON.stringify({
+        choices: [],
+        id: "retry-success",
+        object: "chat.completion",
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    )
+  })
+
+  fetchHost.fetch = transientFetchMock as unknown as typeof fetch
+
+  try {
+    const result = (await createChatCompletions({
+      messages: [{ role: "user", content: "hello" }],
+      model: "gpt-test",
+    })) as { id?: string }
+
+    expect(callCount).toBe(2)
+    expect(result.id).toBe("retry-success")
+  } finally {
+    fetchHost.fetch = previousFetch
+  }
+})
