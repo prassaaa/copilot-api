@@ -34,6 +34,7 @@ import {
   preparePayload,
   sanitizeAnthropicFields,
 } from "./normalize-payload"
+import { readAndNormalizePayload } from "./request-payload"
 import {
   denormalizeRequestToolCallIds,
   normalizeResponseToolCallIds,
@@ -819,15 +820,18 @@ export async function handleCompletion(c: Context) {
 
   await checkRateLimit(state)
 
-  const rawPayload = await c.req.json<ChatCompletionsPayload>()
-  consola.debug("Request payload:", JSON.stringify(rawPayload).slice(-400))
+  const normalizedPayload = await readAndNormalizePayload(c)
+  consola.debug(
+    "Request payload:",
+    JSON.stringify(normalizedPayload).slice(-400),
+  )
 
   const payload = await truncateMessages(
     applyMaxTokensIfNeeded(
       preparePayload(
         normalizeTools(
           sanitizeAnthropicFields(
-            denormalizeRequestToolCallIds(sanitizeMessages(rawPayload)),
+            denormalizeRequestToolCallIds(sanitizeMessages(normalizedPayload)),
           ),
         ),
       ),
