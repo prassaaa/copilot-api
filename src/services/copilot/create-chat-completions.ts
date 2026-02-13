@@ -362,7 +362,8 @@ interface ParsedTierModel {
 }
 
 function parseTierModel(modelId: string): ParsedTierModel | null {
-  const gptMatch = /^gpt-(\d+)(?:\.(\d+))?(-codex)?$/.exec(modelId)
+  // Updated regex to support codex variants with suffixes like -max, -mini
+  const gptMatch = /^gpt-(\d+)(?:\.(\d+))?(-codex(?:-\w+)?)?$/.exec(modelId)
   if (gptMatch) {
     const minorVersion = gptMatch[2] || "0"
     return {
@@ -440,16 +441,22 @@ function getLowerTierCandidates(
 function getModelVariants(modelId: string): Array<string> {
   const variants = new Set<string>()
 
-  const withoutCodex = modelId.replace(/-codex$/, "")
+  const withoutCodex = modelId.replace(/-codex(?:-\w+)?$/, "")
   if (withoutCodex !== modelId) {
     variants.add(withoutCodex)
   }
 
-  const condensedCodex = modelId.replace(/\.\d+-codex$/, "-codex")
-  if (condensedCodex !== modelId) {
-    variants.add(condensedCodex)
+  // Remove codex variant suffix (e.g., gpt-5.1-codex-max -> gpt-5.1-codex)
+  const withoutCodexSuffix = modelId.replace(/-codex-\w+$/, "-codex")
+  if (withoutCodexSuffix !== modelId) {
+    variants.add(withoutCodexSuffix)
   }
 
+  // Condense minor version for all models (e.g., gpt-5.1 -> gpt-5, gpt-5.1-codex-max -> gpt-5-codex-max)
+  const condensedMinor = modelId.replace(/\.\d+(?=-|$)/, "")
+  if (condensedMinor !== modelId) {
+    variants.add(condensedMinor)
+  }
   const withoutMinorVersion = modelId.replaceAll(/\.\d+(?=-|$)/g, "")
   if (withoutMinorVersion !== modelId) {
     variants.add(withoutMinorVersion)
