@@ -265,6 +265,90 @@ async function processStreamChunks(
   return { doneSent, outputTokens }
 }
 
+/**
+ * Convert a non-streaming response to SSE chunks when the upstream returns
+ * a non-streaming response despite `stream=true`.  Records cost and history.
+ */
+async function sendConvertedStreamChunks(
+  response: ChatCompletionResponse,
+  stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
+  ctx: CompletionContext,
+): Promise<void> {
+  let streamOutputTokens = 0
+  const chunks = convertToStreamChunks(response)
+  for (const chunk of chunks) {
+    const normalizedChunk = normalizeStreamChunkData(JSON.stringify(chunk))
+    await stream.writeSSE({ data: normalizedChunk.data })
+    if (normalizedChunk.completionTokens !== null) {
+      streamOutputTokens = normalizedChunk.completionTokens
+    }
+  }
+  await stream.writeSSE({ data: "[DONE]" })
+
+  const outputTokens =
+    response.usage?.completion_tokens || streamOutputTokens || 0
+  const inputTokens = response.usage?.prompt_tokens || ctx.inputTokens
+  const cost = costCalculator.record(
+    ctx.payload.model,
+    inputTokens,
+    outputTokens,
+  )
+  recordHistoryEntry({
+    ctx: { ...ctx, inputTokens },
+    outputTokens,
+    cost: cost.totalCost,
+    status: "success",
+  })
+  logEmitter.log(
+    "success",
+    `Chat completion stream done (converted): model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
+  )
+}
+
+/**
+ * Write error information to an SSE stream so clients like Cursor can display
+ * the error and stop instead of retrying / looping.
+ */
+async function writeStreamError(
+  stream: { writeSSE: (msg: SSEMessage) => Promise<void> },
+  ctx: CompletionContext,
+  error: unknown,
+): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : String(error)
+  const errorContentChunk: ChatCompletionChunk = {
+    id: "chatcmpl-error",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: ctx.payload.model,
+    choices: [
+      {
+        index: 0,
+        delta: { content: `\n\n[Error: ${errorMessage}]` },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  }
+  await stream.writeSSE({ data: JSON.stringify(errorContentChunk) })
+
+  const errorStopChunk: ChatCompletionChunk = {
+    id: "chatcmpl-error",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: ctx.payload.model,
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: "stop",
+        logprobs: null,
+      },
+    ],
+  }
+  await stream.writeSSE({ data: JSON.stringify(errorStopChunk) })
+  await stream.writeSSE({ data: "[DONE]" })
+}
+
 function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
   consola.debug("Streaming response")
   return streamSSE(c, async (stream) => {
@@ -276,19 +360,7 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
       usageStats.recordRequest(ctx.payload.model)
 
       if (isNonStreaming(response)) {
-        // Convert non-streaming response to properly sequenced streaming chunks
-        // so clients like Cursor can parse it correctly.
-        const chunks = convertToStreamChunks(response)
-        for (const chunk of chunks) {
-          const normalizedChunk = normalizeStreamChunkData(
-            JSON.stringify(chunk),
-          )
-          await stream.writeSSE({ data: normalizedChunk.data })
-          if (normalizedChunk.completionTokens !== null) {
-            streamOutputTokens = normalizedChunk.completionTokens
-          }
-        }
-        await stream.writeSSE({ data: "[DONE]" })
+        await sendConvertedStreamChunks(response, stream, ctx)
         return
       }
 
@@ -330,47 +402,8 @@ function handleStreamingResponse(c: Context, ctx: CompletionContext): Response {
         error: error instanceof Error ? error.message : String(error),
       })
 
-      // Send a ChatCompletionChunk with the error message as content so
-      // clients like Cursor can display the error and stop.  A completely
-      // empty chunk with finish_reason "stop" (previous behaviour) caused
-      // clients to misinterpret the response as success and retry / loop.
       if (!doneSent) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error)
-        const errorContentChunk: ChatCompletionChunk = {
-          id: "chatcmpl-error",
-          object: "chat.completion.chunk",
-          created: Math.floor(Date.now() / 1000),
-          model: ctx.payload.model,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                content: `\n\n[Error: ${errorMessage}]`,
-              },
-              finish_reason: null,
-              logprobs: null,
-            },
-          ],
-        }
-        await stream.writeSSE({ data: JSON.stringify(errorContentChunk) })
-
-        const errorStopChunk: ChatCompletionChunk = {
-          id: "chatcmpl-error",
-          object: "chat.completion.chunk",
-          created: Math.floor(Date.now() / 1000),
-          model: ctx.payload.model,
-          choices: [
-            {
-              index: 0,
-              delta: {},
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        }
-        await stream.writeSSE({ data: JSON.stringify(errorStopChunk) })
-        await stream.writeSSE({ data: "[DONE]" })
+        await writeStreamError(stream, ctx, error)
       }
     }
   })
@@ -494,26 +527,32 @@ function removeOrphanedToolMessages(messages: Array<Message>): Array<Message> {
     }
   }
 
-  return messages.filter((msg) => {
-    // Remove tool messages that reference a tool_call_id with no assistant match
-    if (msg.role === "tool" && msg.tool_call_id) {
-      return assistantToolCallIds.has(msg.tool_call_id)
-    }
-
-    // Remove assistant messages whose tool_calls have no matching tool results
-    // (the model would see pending tool calls and may try to re-invoke them)
-    if (msg.role === "assistant" && msg.tool_calls?.length) {
-      const hasAllResults = msg.tool_calls.every((tc) =>
-        toolResultIds.has(tc.id),
-      )
-      if (!hasAllResults) {
-        // Strip the tool_calls but keep the message if it has content
-        return false
+  return messages
+    .map((msg) => {
+      // Strip tool_calls from assistant messages whose results are missing.
+      // Keep the message itself if it has text content (the model said something
+      // before issuing tool calls), otherwise mark for removal by returning null.
+      if (msg.role === "assistant" && msg.tool_calls?.length) {
+        const hasAllResults = msg.tool_calls.every((tc) =>
+          toolResultIds.has(tc.id),
+        )
+        if (!hasAllResults) {
+          if (msg.content) {
+            const { tool_calls: _, ...rest } = msg
+            return rest as Message
+          }
+          return null
+        }
       }
-    }
 
-    return true
-  })
+      // Remove tool messages that reference a tool_call_id with no assistant match
+      if (msg.role === "tool" && msg.tool_call_id) {
+        return assistantToolCallIds.has(msg.tool_call_id) ? msg : null
+      }
+
+      return msg
+    })
+    .filter((msg): msg is Message => msg !== null)
 }
 
 async function computeInputTokens(

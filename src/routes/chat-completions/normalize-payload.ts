@@ -32,6 +32,18 @@ function cleanSchema(schema: Record<string, unknown>): Record<string, unknown> {
     cleaned.items = cleanSchema(cleaned.items as Record<string, unknown>)
   }
 
+  // Recursively clean schema composition keywords (anyOf, oneOf, allOf)
+  // Cursor commonly sends union types using these constructs.
+  for (const keyword of ["anyOf", "oneOf", "allOf"] as const) {
+    if (Array.isArray(cleaned[keyword])) {
+      cleaned[keyword] = (cleaned[keyword] as Array<unknown>).map((item) =>
+        typeof item === "object" && item !== null ?
+          cleanSchema(item as Record<string, unknown>)
+        : item,
+      )
+    }
+  }
+
   return cleaned
 }
 
@@ -91,7 +103,11 @@ export function normalizeTools(
     const raw = toolChoice as Record<string, unknown>
     if (raw.type === "auto" || raw.type === "none" || raw.type === "required") {
       toolChoice = raw.type
-    } else if (raw.type === "function" && raw.name) {
+    } else if (raw.type === "any") {
+      // Anthropic "any" maps to OpenAI "required"
+      toolChoice = "required"
+    } else if ((raw.type === "function" || raw.type === "tool") && raw.name) {
+      // Anthropic { type: "tool", name } maps to OpenAI { type: "function", function: { name } }
       toolChoice = {
         type: "function" as const,
         function: { name: raw.name as string },
@@ -141,6 +157,10 @@ function classifyContentParts(parts: Array<unknown>): ClassifiedParts {
   return { toolResults, toolUses, other }
 }
 
+function generateToolCallId(): string {
+  return `call_${crypto.randomUUID().replaceAll("-", "")}`
+}
+
 function toolUsePartsToAssistantMessage(
   toolUseParts: Array<Record<string, unknown>>,
   otherParts: Array<unknown>,
@@ -157,24 +177,27 @@ function toolUsePartsToAssistantMessage(
   return {
     role: "assistant",
     content: textContent || null,
-    tool_calls: toolUseParts.map((tu) => ({
-      id: (tu.id as string) || "",
-      type: "function" as const,
-      function: {
-        name: (tu.name as string) || "",
-        arguments:
-          typeof tu.input === "string" ?
-            tu.input
-          : JSON.stringify(tu.input ?? {}),
-      },
-    })),
+    tool_calls: toolUseParts.map((tu) => {
+      const id = (tu.id as string) || generateToolCallId()
+      return {
+        id,
+        type: "function" as const,
+        function: {
+          name: (tu.name as string) || "",
+          arguments:
+            typeof tu.input === "string" ?
+              tu.input
+            : JSON.stringify(tu.input ?? {}),
+        },
+      }
+    }),
   }
 }
 
 function toolResultPartToToolMessage(tr: Record<string, unknown>): Message {
   return {
     role: "tool",
-    tool_call_id: (tr.tool_use_id as string) || "",
+    tool_call_id: (tr.tool_use_id as string) || generateToolCallId(),
     content:
       typeof tr.content === "string" ?
         tr.content
@@ -213,6 +236,9 @@ export function sanitizeAnthropicFields(
     // No Anthropic blocks found — just strip cache_control
     if (toolResults.length === 0 && toolUses.length === 0) {
       const stripped = stripCacheControl(msg.content)
+      if (stripped !== msg.content) {
+        changed = true
+      }
       outMessages.push({ ...msg, content: stripped })
       continue
     }
@@ -244,10 +270,19 @@ export function sanitizeAnthropicFields(
 /**
  * Remove `cache_control` from every content part (Anthropic-only field).
  * Parts come from the network so they may contain fields not in our types.
+ * Returns the original array unchanged when no parts had `cache_control`.
  */
 function stripCacheControl(
   parts: Message["content"] & Array<unknown>,
 ): Message["content"] & Array<unknown> {
+  const hasCacheControl = parts.some(
+    (part) =>
+      typeof part === "object"
+      && part !== null
+      && Object.prototype.hasOwnProperty.call(part, "cache_control"),
+  )
+  if (!hasCacheControl) return parts
+
   const cleaned = parts.map((part) => {
     if (typeof part !== "object" || part === null) return part
     const raw = part as Record<string, unknown>
