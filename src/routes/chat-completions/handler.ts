@@ -257,10 +257,18 @@ async function processStreamChunks(
   }
 
   // Summary log — critical for debugging tool call issues
-  logEmitter.log(
-    "debug",
-    `Stream summary: finish_reason=${lastFinishReason}, has_tool_calls=${hasToolCalls}`,
-  )
+  if (!doneSent) {
+    consola.warn("Stream ended without [DONE] marker")
+    logEmitter.log(
+      "warn",
+      `Stream ended without [DONE]: finish_reason=${lastFinishReason}, has_tool_calls=${hasToolCalls}`,
+    )
+  } else {
+    logEmitter.log(
+      "debug",
+      `Stream summary: finish_reason=${lastFinishReason}, has_tool_calls=${hasToolCalls}`,
+    )
+  }
 
   return { doneSent, outputTokens }
 }
@@ -409,21 +417,29 @@ async function handleStreamingResponse(
         `Chat completion stream done: model=${ctx.payload.model}${ctx.accountInfo ? `, account=${ctx.accountInfo}` : ""}`,
       )
     } catch (error) {
-      consola.error("Streaming error:", error)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      consola.error("Mid-stream error:", errorMsg)
+      logEmitter.log(
+        "error",
+        `Stream interrupted: model=${ctx.payload.model}, error=${errorMsg}`,
+      )
 
       recordHistoryEntry({
         ctx,
         outputTokens: streamOutputTokens,
         cost: 0,
         status: "error",
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMsg,
       })
 
       if (!doneSent) {
         try {
           await writeStreamError(stream, ctx, error)
-        } catch {
-          // Client already disconnected — nothing we can do.
+        } catch (writeErr) {
+          consola.warn(
+            "Failed to write stream error (client disconnected):",
+            writeErr instanceof Error ? writeErr.message : String(writeErr),
+          )
         }
       }
     }
