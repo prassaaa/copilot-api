@@ -6,6 +6,7 @@ import type {
 } from "~/services/copilot/create-chat-completions"
 
 import { HTTPError } from "~/lib/error"
+import { normalizeToolCallArguments } from "~/lib/tool-call-arguments"
 
 const VALID_MESSAGE_ROLES = new Set<Message["role"]>([
   "user",
@@ -82,34 +83,6 @@ function normalizeContent(
     return JSON.stringify(content)
   } catch {
     return "[unsupported content]"
-  }
-}
-
-function normalizeToolCallArguments(argumentsLike: unknown): string {
-  if (typeof argumentsLike === "string") {
-    const trimmed = argumentsLike.trim()
-    if (trimmed.length === 0) return "{}"
-
-    try {
-      JSON.parse(trimmed)
-      return trimmed
-    } catch {
-      // Repair invalid escape sequences (e.g. Windows paths with single '\')
-      // that commonly trigger upstream "invalid arguments" parse errors.
-      const repaired = trimmed.replaceAll(/\\(?!["\\/bfnrtu])/g, "\\\\")
-      try {
-        JSON.parse(repaired)
-        return repaired
-      } catch {
-        return "{}"
-      }
-    }
-  }
-  if (argumentsLike === undefined) return "{}"
-  try {
-    return JSON.stringify(argumentsLike)
-  } catch {
-    return "{}"
   }
 }
 

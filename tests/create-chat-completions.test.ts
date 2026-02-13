@@ -658,3 +658,42 @@ test("retries transient upstream status before succeeding", async () => {
     fetchHost.fetch = previousFetch
   }
 })
+
+test("normalizes malformed tool call arguments before upstream request", async () => {
+  const payload: ChatCompletionsPayload = {
+    model: "gpt-test",
+    messages: [
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_test_1",
+            type: "function",
+            function: {
+              name: "edit_file",
+              arguments: String.raw`{"path":"C:\Program Files\cursor","query":"hello"}`,
+            },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_test_1",
+        content: '{"ok":true}',
+      },
+    ],
+  }
+
+  await createChatCompletions(payload)
+
+  const lastCall = fetchMock.mock.calls.at(-1)
+  const body = (lastCall?.[1] as { body?: string }).body
+  const parsed = JSON.parse(body as string) as ChatCompletionsPayload
+  const argumentsString =
+    parsed.messages[0]?.tool_calls?.[0]?.function.arguments ?? ""
+
+  expect(argumentsString).toBe(
+    String.raw`{"path":"C:\\Program Files\\cursor","query":"hello"}`,
+  )
+})

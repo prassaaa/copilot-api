@@ -15,21 +15,13 @@ import { logEmitter } from "~/lib/logger"
 import { sleep } from "~/lib/retry"
 import { state } from "~/lib/state"
 import { getActiveCopilotToken } from "~/lib/token"
+import { normalizeAssistantToolCalls } from "~/lib/tool-call-arguments"
+import { CHAT_COMPLETION_TIMEOUT } from "~/services/copilot/chat-completion-timeout"
 import {
   findFallbackModelForFailedResponse,
   type CopilotErrorBody,
 } from "~/services/copilot/fallback-selection"
 
-function resolveChatCompletionTimeoutMs(): number {
-  const raw = process.env.CHAT_COMPLETION_TIMEOUT_MS
-  if (!raw) return 300000
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) return 300000
-  return parsed
-}
-
-// Timeout for chat completions (defaults to 5 minutes; configurable via env)
-const CHAT_COMPLETION_TIMEOUT = resolveChatCompletionTimeoutMs()
 const MAX_CHAT_COMPLETION_RETRY_ATTEMPTS = 3
 const INITIAL_CHAT_COMPLETION_RETRY_DELAY_MS = 500
 const MAX_CHAT_COMPLETION_RETRY_DELAY_MS = 8000
@@ -222,13 +214,28 @@ function normalizePayloadContent(
 ): ChatCompletionsPayload {
   return {
     ...payload,
-    messages: payload.messages.map((message) => ({
-      ...message,
-      content:
+    messages: payload.messages.map((message) => {
+      const normalizedContent =
         message.role === "tool" ?
           normalizeToolMessageContent(normalizeMessageContent(message.content))
-        : normalizeMessageContent(message.content),
-    })),
+        : normalizeMessageContent(message.content)
+      const normalizedToolCalls = normalizeAssistantToolCalls(message)
+
+      if (
+        normalizedContent === message.content
+        && normalizedToolCalls === message.tool_calls
+      ) {
+        return message
+      }
+
+      return {
+        ...message,
+        content: normalizedContent,
+        ...(normalizedToolCalls !== undefined ?
+          { tool_calls: normalizedToolCalls }
+        : {}),
+      }
+    }),
   }
 }
 

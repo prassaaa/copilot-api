@@ -160,4 +160,55 @@ describe("tool_call_id normalization", () => {
     expect(assistantToolId).toBe(originalId)
     expect(toolMessageId).toBe(originalId)
   })
+
+  test("relinks contiguous tool results when legacy ids no longer match", () => {
+    const payload: ChatCompletionsPayload = {
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool_use_new_1",
+              type: "function",
+              function: {
+                name: "run_tool_1",
+                arguments: "{}",
+              },
+            },
+            {
+              id: "tool_use_new_2",
+              type: "function",
+              function: {
+                name: "run_tool_2",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_legacy_a",
+          content: '{"ok":true}',
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_legacy_b",
+          content: '{"ok":true}',
+        },
+      ],
+    }
+
+    const denormalized = denormalizeRequestToolCallIds(payload)
+
+    expect(denormalized.messages[1]).toMatchObject({
+      role: "tool",
+      tool_call_id: "tool_use_new_1",
+    })
+    expect(denormalized.messages[2]).toMatchObject({
+      role: "tool",
+      tool_call_id: "tool_use_new_2",
+    })
+  })
 })

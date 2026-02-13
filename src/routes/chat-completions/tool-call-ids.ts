@@ -2,6 +2,7 @@ import type {
   ChatCompletionChunk,
   ChatCompletionResponse,
   ChatCompletionsPayload,
+  Message,
 } from "~/services/copilot/create-chat-completions"
 
 const toolCallIdMap = new Map<string, string>()
@@ -80,6 +81,97 @@ function denormalizeToolCallId(id: string): string {
   return id
 }
 
+function getContiguousToolIndexes(
+  messages: Array<Message>,
+  assistantIndex: number,
+): Array<number> {
+  const contiguousToolIndexes: Array<number> = []
+  for (let i = assistantIndex + 1; i < messages.length; i++) {
+    const message = messages[i]
+    if (message.role !== "tool") {
+      break
+    }
+    contiguousToolIndexes.push(i)
+  }
+  return contiguousToolIndexes
+}
+
+function countMatchingToolIds(params: {
+  messages: Array<Message>
+  indexes: Array<number>
+  expectedIds: Array<string>
+}): number {
+  const { messages, indexes, expectedIds } = params
+  let matchingCount = 0
+  for (const index of indexes) {
+    const message = messages[index]
+    if (
+      message.role === "tool"
+      && message.tool_call_id
+      && expectedIds.includes(message.tool_call_id)
+    ) {
+      matchingCount++
+    }
+  }
+  return matchingCount
+}
+
+function relinkContiguousToolMessages(
+  messages: Array<Message>,
+): Array<Message> {
+  let changed = false
+  const relinkedMessages = [...messages]
+
+  for (const [assistantIndex, message] of relinkedMessages.entries()) {
+    if (message.role !== "assistant" || !message.tool_calls?.length) {
+      continue
+    }
+
+    const expectedIds = message.tool_calls.map((toolCall) => toolCall.id)
+    if (expectedIds.length === 0) {
+      continue
+    }
+
+    const contiguousToolIndexes = getContiguousToolIndexes(
+      relinkedMessages,
+      assistantIndex,
+    )
+    if (contiguousToolIndexes.length === 0) {
+      continue
+    }
+
+    const matchingCount = countMatchingToolIds({
+      messages: relinkedMessages,
+      indexes: contiguousToolIndexes,
+      expectedIds,
+    })
+    const canRelinkByOrder =
+      contiguousToolIndexes.length === expectedIds.length && matchingCount === 0
+
+    if (!canRelinkByOrder) {
+      continue
+    }
+
+    for (const [offset, messageIndex] of contiguousToolIndexes.entries()) {
+      const toolMessage = relinkedMessages[messageIndex]
+      if (toolMessage.role !== "tool") {
+        continue
+      }
+      const expectedId = expectedIds[offset]
+      if (!expectedId || toolMessage.tool_call_id === expectedId) {
+        continue
+      }
+      relinkedMessages[messageIndex] = {
+        ...toolMessage,
+        tool_call_id: expectedId,
+      }
+      changed = true
+    }
+  }
+
+  return changed ? relinkedMessages : messages
+}
+
 export function denormalizeRequestToolCallIds(
   payload: ChatCompletionsPayload,
 ): ChatCompletionsPayload {
@@ -108,7 +200,10 @@ export function denormalizeRequestToolCallIds(
     return msg
   })
 
-  return { ...payload, messages }
+  return {
+    ...payload,
+    messages: relinkContiguousToolMessages(messages),
+  }
 }
 
 export function normalizeResponseToolCallIds(
