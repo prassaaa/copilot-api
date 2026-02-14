@@ -48,6 +48,7 @@ import {
   normalizeResponseToolCallIds,
   normalizeStreamChunkData,
 } from "./tool-call-ids"
+import { applyToolLoopGuard } from "./tool-loop-guard"
 import { truncateMessages } from "./truncate-messages"
 
 interface CompletionContext {
@@ -752,6 +753,22 @@ async function maybeEnqueueRequest(
   }
 }
 
+function applyAndLogToolLoopGuard(
+  payload: ChatCompletionsPayload,
+): ChatCompletionsPayload {
+  const loopGuard = applyToolLoopGuard(payload)
+  if (!loopGuard.applied) {
+    return payload
+  }
+
+  const message =
+    `Applied tool-loop guard: trailing_tool_turns=${loopGuard.trailingTurns}, `
+    + `threshold=${loopGuard.threshold}, model=${loopGuard.payload.model}`
+  consola.warn(message)
+  logEmitter.log("warn", message)
+  return loopGuard.payload
+}
+
 async function executeCompletion(
   c: Context,
   ctx: CompletionContext,
@@ -781,7 +798,7 @@ export async function handleCompletion(c: Context) {
     JSON.stringify(normalizedPayload).slice(-400),
   )
 
-  const payload = await truncateMessages(
+  const truncatedPayload = await truncateMessages(
     applyMaxTokensIfNeeded(
       preparePayload(
         normalizeTools(
@@ -792,6 +809,7 @@ export async function handleCompletion(c: Context) {
       ),
     ),
   )
+  const payload = applyAndLogToolLoopGuard(truncatedPayload)
   const accountInfo =
     isPoolEnabledSync() ? (getCurrentAccount()?.login ?? null) : null
 
