@@ -102,7 +102,18 @@ async function computeInputTokens(
   }
 }
 
-function resolvePromptTokenLimit(
+function resolvePromptReserve(
+  tokenLimit: number,
+  maxOutputTokens: number | undefined,
+): number {
+  const baselineReserve = Math.max(4096, Math.floor(tokenLimit * 0.05))
+  if (maxOutputTokens && maxOutputTokens > 0) {
+    return Math.min(maxOutputTokens, baselineReserve)
+  }
+  return baselineReserve
+}
+
+export function resolvePromptTokenLimit(
   limits:
     | {
         max_prompt_tokens?: number
@@ -111,7 +122,14 @@ function resolvePromptTokenLimit(
       }
     | undefined,
 ): number | null {
-  if (limits?.max_prompt_tokens) return limits.max_prompt_tokens
+  if (limits?.max_prompt_tokens) {
+    const promptLimit = limits.max_prompt_tokens
+    const outputReserve = resolvePromptReserve(
+      promptLimit,
+      limits.max_output_tokens,
+    )
+    return Math.max(promptLimit - outputReserve, 1024)
+  }
 
   if (limits?.max_context_window_tokens) {
     const contextWindow = limits.max_context_window_tokens
