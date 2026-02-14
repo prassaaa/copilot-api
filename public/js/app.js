@@ -1194,12 +1194,14 @@ document.addEventListener("alpine:init", () => {
     connectLogStream() {
       if (this.logsEventSource) {
         this.logsEventSource.close()
+        this.logsEventSource = null
       }
 
-      this.logsEventSource = new EventSource("/api/logs/stream")
+      const es = new EventSource("/api/logs/stream")
+      this.logsEventSource = es
       this.logsConnected = false
 
-      this.logsEventSource.addEventListener("log", (event) => {
+      es.addEventListener("log", (event) => {
         // Skip if paused
         if (this.logsPaused) return
 
@@ -1223,26 +1225,31 @@ document.addEventListener("alpine:init", () => {
         this.checkLogForAlerts(log)
       })
 
-      this.logsEventSource.addEventListener("connected", () => {
+      es.addEventListener("connected", () => {
         console.log("Log stream connected")
         this.logsConnected = true
       })
 
-      this.logsEventSource.onerror = () => {
+      es.onerror = () => {
         console.error("Log stream error, reconnecting...")
+        es.close()
         this.logsConnected = false
+        if (this.logsEventSource === es) {
+          this.logsEventSource = null
+        }
         setTimeout(() => this.connectLogStream(), 5000)
       }
     },
     connectNotificationStream() {
       if (this.notificationsEventSource) {
         this.notificationsEventSource.close()
+        this.notificationsEventSource = null
       }
 
-      this.notificationsEventSource = new EventSource(
-        "/api/notifications/stream",
-      )
-      this.notificationsEventSource.addEventListener("notification", (event) => {
+      const es = new EventSource("/api/notifications/stream")
+      this.notificationsEventSource = es
+
+      es.addEventListener("notification", (event) => {
         try {
           const notif = JSON.parse(event.data)
           this.addNotification({
@@ -1254,7 +1261,13 @@ document.addEventListener("alpine:init", () => {
           // Ignore parse errors
         }
       })
-      this.notificationsEventSource.onerror = () => {
+
+      es.onerror = () => {
+        // Close the broken connection before reconnecting
+        es.close()
+        if (this.notificationsEventSource === es) {
+          this.notificationsEventSource = null
+        }
         setTimeout(() => this.connectNotificationStream(), 5000)
       }
     },

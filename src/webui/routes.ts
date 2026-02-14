@@ -552,15 +552,29 @@ webuiRoutes.post("/api/claude-config", async (c) => {
  */
 webuiRoutes.get("/api/logs/stream", (c) => {
   return streamSSE(c, async (stream) => {
+    let closed = false
+
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      logEmitter.off("log", sendLog)
+      clearInterval(heartbeat)
+    }
+
     const sendLog = (log: {
       level: string
       message: string
       timestamp: string
     }) => {
-      void stream.writeSSE({
-        event: "log",
-        data: JSON.stringify(log),
-      })
+      if (closed) return
+      stream
+        .writeSSE({
+          event: "log",
+          data: JSON.stringify(log),
+        })
+        .catch(() => {
+          cleanup()
+        })
     }
 
     // Subscribe to log events
@@ -572,18 +586,22 @@ webuiRoutes.get("/api/logs/stream", (c) => {
       data: JSON.stringify({ message: "Log stream connected" }),
     })
 
-    // Keep connection alive with heartbeat
+    // Keep connection alive with heartbeat (15s to prevent proxy timeouts)
     const heartbeat = setInterval(() => {
-      void stream.writeSSE({
-        event: "heartbeat",
-        data: JSON.stringify({ timestamp: new Date().toISOString() }),
-      })
-    }, 30000)
+      if (closed) return
+      stream
+        .writeSSE({
+          event: "heartbeat",
+          data: JSON.stringify({ timestamp: new Date().toISOString() }),
+        })
+        .catch(() => {
+          cleanup()
+        })
+    }, 15000)
 
     // Cleanup on disconnect
     stream.onAbort(() => {
-      logEmitter.off("log", sendLog)
-      clearInterval(heartbeat)
+      cleanup()
     })
 
     // Keep stream open

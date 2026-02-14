@@ -89,12 +89,29 @@ notificationRoutes.get("/stream", async (c) => {
   )
 
   return streamSSE(c, async (stream) => {
+    let closed = false
+
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      notificationEmitter.removeEventListener(
+        NOTIFICATION_EVENT,
+        sendNotification,
+      )
+      clearInterval(heartbeat)
+    }
+
     const sendNotification = (event: Event) => {
+      if (closed) return
       const { detail } = event as CustomEvent<unknown>
-      void stream.writeSSE({
-        event: "notification",
-        data: JSON.stringify(detail),
-      })
+      stream
+        .writeSSE({
+          event: "notification",
+          data: JSON.stringify(detail),
+        })
+        .catch(() => {
+          cleanup()
+        })
     }
 
     notificationEmitter.addEventListener(NOTIFICATION_EVENT, sendNotification)
@@ -105,18 +122,19 @@ notificationRoutes.get("/stream", async (c) => {
     })
 
     const heartbeat = setInterval(() => {
-      void stream.writeSSE({
-        event: "heartbeat",
-        data: JSON.stringify({ timestamp: new Date().toISOString() }),
-      })
-    }, 30000)
+      if (closed) return
+      stream
+        .writeSSE({
+          event: "heartbeat",
+          data: JSON.stringify({ timestamp: new Date().toISOString() }),
+        })
+        .catch(() => {
+          cleanup()
+        })
+    }, 15000)
 
     stream.onAbort(() => {
-      notificationEmitter.removeEventListener(
-        NOTIFICATION_EVENT,
-        sendNotification,
-      )
-      clearInterval(heartbeat)
+      cleanup()
     })
 
     await new Promise(() => {})
