@@ -90,6 +90,30 @@ function normalizeHttpError(errorText: string): {
   }
 }
 
+function isClientAbortError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const name = error.name.toLowerCase()
+    const message = error.message.toLowerCase()
+    return (
+      name === "aborterror"
+      || message.includes("operation was aborted")
+      || message.includes("request aborted")
+      || message.includes("client aborted")
+    )
+  }
+
+  if (typeof error === "string") {
+    const message = error.toLowerCase()
+    return (
+      message.includes("operation was aborted")
+      || message.includes("request aborted")
+      || message.includes("client aborted")
+    )
+  }
+
+  return false
+}
+
 const FORWARDED_ERROR_HEADERS = new Set([
   "retry-after",
   "www-authenticate",
@@ -134,6 +158,22 @@ function isQuotaError(
 }
 
 export async function forwardError(c: Context, error: unknown) {
+  if (isClientAbortError(error)) {
+    consola.debug("Request aborted by client")
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Request aborted by client",
+          type: "aborted",
+        },
+      }),
+      {
+        status: 499,
+        headers: { "content-type": "application/json; charset=UTF-8" },
+      },
+    )
+  }
+
   consola.error("Error occurred:", error)
 
   if (error instanceof HTTPError) {
