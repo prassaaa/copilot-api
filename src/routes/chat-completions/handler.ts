@@ -37,6 +37,10 @@ import {
   createInvalidPayloadError,
   readAndNormalizePayload,
 } from "./request-payload"
+import {
+  executeThroughResponsesBridge,
+  modelRequiresResponsesApi,
+} from "./responses-bridge"
 import { convertToStreamChunks } from "./stream-chunks"
 import {
   denormalizeRequestToolCallIds,
@@ -694,6 +698,32 @@ function applyMaxTokensIfNeeded(
   return payload
 }
 
+async function handleResponsesBridge(
+  c: Context,
+  ctx: CompletionContext,
+): Promise<Response> {
+  consola.info(
+    `Model "${ctx.payload.model}" requires /responses API, bridging from /chat/completions`,
+  )
+  logEmitter.log(
+    "info",
+    `Auto-bridging model=${ctx.payload.model} from /chat/completions to /responses`,
+  )
+
+  try {
+    return await executeThroughResponsesBridge(c, ctx.payload)
+  } catch (error) {
+    recordHistoryEntry({
+      ctx,
+      outputTokens: 0,
+      cost: 0,
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
 function createQueueFullResponse(c: Context): Response {
   return c.json(
     {
@@ -704,6 +734,22 @@ function createQueueFullResponse(c: Context): Response {
     },
     503,
   )
+}
+
+async function maybeEnqueueRequest(
+  c: Context,
+  payload: ChatCompletionsPayload,
+): Promise<{ requestId?: string; response?: Response }> {
+  if (payload.stream) return {}
+
+  try {
+    return { requestId: await handleQueueEnqueue() }
+  } catch (error) {
+    if (error instanceof QueueFullError) {
+      return { response: createQueueFullResponse(c) }
+    }
+    throw error
+  }
 }
 
 async function executeCompletion(
@@ -773,20 +819,21 @@ export async function handleCompletion(c: Context) {
     inputTokens,
   }
 
+  // Check if model requires the Responses API (e.g., codex models)
+  // If so, automatically bridge through the /responses endpoint
+  if (modelRequiresResponsesApi(payload.model)) {
+    return handleResponsesBridge(c, ctx)
+  }
+
   const cachedResponse = handleCachedResponse(c, ctx)
   if (cachedResponse) return cachedResponse
 
   if (state.manualApprove) await awaitApproval()
 
-  if (!payload.stream) {
-    try {
-      requestId = await handleQueueEnqueue()
-    } catch (error) {
-      if (error instanceof QueueFullError) {
-        return createQueueFullResponse(c)
-      }
-      throw error
-    }
+  const queueResult = await maybeEnqueueRequest(c, payload)
+  if (queueResult.response) return queueResult.response
+  if (queueResult.requestId) {
+    requestId = queueResult.requestId
   }
 
   try {
