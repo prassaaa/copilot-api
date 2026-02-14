@@ -11,7 +11,7 @@ import {
   normalizeResponseToolCallIds,
 } from "../src/routes/chat-completions/tool-call-ids"
 
-describe("tool_call_id normalization", () => {
+describe("tool_call_id normalization roundtrip", () => {
   test("preserves native call_* IDs without reverse mapping", () => {
     const payload: ChatCompletionsPayload = {
       model: "gpt-test",
@@ -160,7 +160,9 @@ describe("tool_call_id normalization", () => {
     expect(assistantToolId).toBe(originalId)
     expect(toolMessageId).toBe(originalId)
   })
+})
 
+describe("tool_call_id normalization relinking", () => {
   test("relinks contiguous tool results when legacy ids no longer match", () => {
     const payload: ChatCompletionsPayload = {
       model: "gpt-test",
@@ -209,6 +211,149 @@ describe("tool_call_id normalization", () => {
     expect(denormalized.messages[2]).toMatchObject({
       role: "tool",
       tool_call_id: "tool_use_new_2",
+    })
+  })
+
+  test("relinks partial mismatch while preserving already matching tool id", () => {
+    const payload: ChatCompletionsPayload = {
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool_use_new_1",
+              type: "function",
+              function: {
+                name: "run_tool_1",
+                arguments: "{}",
+              },
+            },
+            {
+              id: "tool_use_new_2",
+              type: "function",
+              function: {
+                name: "run_tool_2",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_legacy_a",
+          content: '{"ok":true}',
+        },
+        {
+          role: "tool",
+          tool_call_id: "tool_use_new_2",
+          content: '{"ok":true}',
+        },
+      ],
+    }
+
+    const denormalized = denormalizeRequestToolCallIds(payload)
+
+    expect(denormalized.messages[1]).toMatchObject({
+      role: "tool",
+      tool_call_id: "tool_use_new_1",
+    })
+    expect(denormalized.messages[2]).toMatchObject({
+      role: "tool",
+      tool_call_id: "tool_use_new_2",
+    })
+  })
+
+  test("drops extra contiguous tool results without matching tool_call", () => {
+    const payload: ChatCompletionsPayload = {
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool_use_new_1",
+              type: "function",
+              function: {
+                name: "run_tool_1",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_legacy_a",
+          content: '{"ok":true}',
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_legacy_b",
+          content: '{"ok":true}',
+        },
+      ],
+    }
+
+    const denormalized = denormalizeRequestToolCallIds(payload)
+
+    expect(denormalized.messages).toHaveLength(2)
+    expect(denormalized.messages[1]).toMatchObject({
+      role: "tool",
+      tool_call_id: "tool_use_new_1",
+    })
+  })
+
+  test("trims assistant tool_calls when fewer tool results are available", () => {
+    const payload: ChatCompletionsPayload = {
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "tool_use_new_1",
+              type: "function",
+              function: {
+                name: "run_tool_1",
+                arguments: "{}",
+              },
+            },
+            {
+              id: "tool_use_new_2",
+              type: "function",
+              function: {
+                name: "run_tool_2",
+                arguments: "{}",
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_legacy_a",
+          content: '{"ok":true}',
+        },
+      ],
+    }
+
+    const denormalized = denormalizeRequestToolCallIds(payload)
+    const assistantMessage = denormalized.messages[0]
+
+    if (assistantMessage.role !== "assistant" || !assistantMessage.tool_calls) {
+      throw new Error("Expected assistant message with tool_calls")
+    }
+
+    expect(assistantMessage.role).toBe("assistant")
+    expect(assistantMessage.tool_calls).toHaveLength(1)
+    expect(assistantMessage.tool_calls[0]).toMatchObject({
+      id: "tool_use_new_1",
+    })
+    expect(denormalized.messages[1]).toMatchObject({
+      role: "tool",
+      tool_call_id: "tool_use_new_1",
     })
   })
 })

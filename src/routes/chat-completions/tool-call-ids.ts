@@ -96,26 +96,6 @@ function getContiguousToolIndexes(
   return contiguousToolIndexes
 }
 
-function countMatchingToolIds(params: {
-  messages: Array<Message>
-  indexes: Array<number>
-  expectedIds: Array<string>
-}): number {
-  const { messages, indexes, expectedIds } = params
-  let matchingCount = 0
-  for (const index of indexes) {
-    const message = messages[index]
-    if (
-      message.role === "tool"
-      && message.tool_call_id
-      && expectedIds.includes(message.tool_call_id)
-    ) {
-      matchingCount++
-    }
-  }
-  return matchingCount
-}
-
 function relinkContiguousToolMessages(
   messages: Array<Message>,
 ): Array<Message> {
@@ -140,19 +120,12 @@ function relinkContiguousToolMessages(
       continue
     }
 
-    const matchingCount = countMatchingToolIds({
-      messages: relinkedMessages,
-      indexes: contiguousToolIndexes,
-      expectedIds,
-    })
-    const canRelinkByOrder =
-      contiguousToolIndexes.length === expectedIds.length && matchingCount === 0
-
-    if (!canRelinkByOrder) {
-      continue
-    }
-
-    for (const [offset, messageIndex] of contiguousToolIndexes.entries()) {
+    const relinkCount = Math.min(
+      contiguousToolIndexes.length,
+      expectedIds.length,
+    )
+    for (let offset = 0; offset < relinkCount; offset++) {
+      const messageIndex = contiguousToolIndexes[offset]
       const toolMessage = relinkedMessages[messageIndex]
       if (toolMessage.role !== "tool") {
         continue
@@ -164,6 +137,26 @@ function relinkContiguousToolMessages(
       relinkedMessages[messageIndex] = {
         ...toolMessage,
         tool_call_id: expectedId,
+      }
+      changed = true
+    }
+
+    // Drop extra contiguous tool messages that cannot be matched to any
+    // tool_call from the assistant turn.
+    if (contiguousToolIndexes.length > relinkCount) {
+      const extraIndexes = contiguousToolIndexes.slice(relinkCount)
+      for (const index of extraIndexes.toReversed()) {
+        relinkedMessages.splice(index, 1)
+      }
+      changed = true
+    }
+
+    // Trim assistant tool_calls when some tool results are missing after
+    // context updates/truncation, to avoid dangling IDs that can cause loops.
+    if (expectedIds.length > relinkCount && relinkCount > 0) {
+      relinkedMessages[assistantIndex] = {
+        ...message,
+        tool_calls: message.tool_calls.slice(0, relinkCount),
       }
       changed = true
     }
