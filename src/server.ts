@@ -29,6 +29,7 @@ server.use(async (c, next) => {
     || path.startsWith("/css/")
     || path === "/favicon.svg"
     || path === "/api/logs/stream"
+    || path === "/api/notifications/stream"
     || path === "/api/event_logging/batch"
 
   if (!skipLog) {

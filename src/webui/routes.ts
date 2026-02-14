@@ -64,6 +64,7 @@ const SESSION_EXPIRATION_MS = 24 * 60 * 60 * 1000
 const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000
 // OAuth flow expiration (10 minutes)
 const OAUTH_FLOW_EXPIRATION_MS = 10 * 60 * 1000
+const SSE_HEARTBEAT_INTERVAL_MS = 5000
 
 // Store active sessions with creation time
 interface SessionData {
@@ -551,14 +552,24 @@ webuiRoutes.post("/api/claude-config", async (c) => {
  * GET /api/logs/stream - Stream server logs via SSE
  */
 webuiRoutes.get("/api/logs/stream", (c) => {
+  c.header("Cache-Control", "no-cache, no-transform")
+  c.header("Connection", "keep-alive")
+  c.header("X-Accel-Buffering", "no")
+
   return streamSSE(c, async (stream) => {
     let closed = false
+    const streamTimers: {
+      heartbeat: ReturnType<typeof setInterval> | null
+    } = { heartbeat: null }
 
     const cleanup = () => {
       if (closed) return
       closed = true
       logEmitter.off("log", sendLog)
-      clearInterval(heartbeat)
+      if (streamTimers.heartbeat) {
+        clearInterval(streamTimers.heartbeat)
+        streamTimers.heartbeat = null
+      }
     }
 
     const sendLog = (log: {
@@ -587,7 +598,7 @@ webuiRoutes.get("/api/logs/stream", (c) => {
     })
 
     // Keep connection alive with heartbeat (15s to prevent proxy timeouts)
-    const heartbeat = setInterval(() => {
+    streamTimers.heartbeat = setInterval(() => {
       if (closed) return
       stream
         .writeSSE({
@@ -597,7 +608,7 @@ webuiRoutes.get("/api/logs/stream", (c) => {
         .catch(() => {
           cleanup()
         })
-    }, 15000)
+    }, SSE_HEARTBEAT_INTERVAL_MS)
 
     // Cleanup on disconnect
     stream.onAbort(() => {

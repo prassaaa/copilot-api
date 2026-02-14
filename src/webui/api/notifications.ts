@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { streamSSE } from "hono/streaming"
 
 export const notificationRoutes = new Hono()
+const SSE_HEARTBEAT_INTERVAL_MS = 5000
 
 /**
  * GET /api/notifications - Get all notifications
@@ -88,8 +89,15 @@ notificationRoutes.get("/stream", async (c) => {
     "~/lib/notification-center"
   )
 
+  c.header("Cache-Control", "no-cache, no-transform")
+  c.header("Connection", "keep-alive")
+  c.header("X-Accel-Buffering", "no")
+
   return streamSSE(c, async (stream) => {
     let closed = false
+    const streamTimers: {
+      heartbeat: ReturnType<typeof setInterval> | null
+    } = { heartbeat: null }
 
     const cleanup = () => {
       if (closed) return
@@ -98,7 +106,10 @@ notificationRoutes.get("/stream", async (c) => {
         NOTIFICATION_EVENT,
         sendNotification,
       )
-      clearInterval(heartbeat)
+      if (streamTimers.heartbeat) {
+        clearInterval(streamTimers.heartbeat)
+        streamTimers.heartbeat = null
+      }
     }
 
     const sendNotification = (event: Event) => {
@@ -121,7 +132,7 @@ notificationRoutes.get("/stream", async (c) => {
       data: JSON.stringify({ message: "Notification stream connected" }),
     })
 
-    const heartbeat = setInterval(() => {
+    streamTimers.heartbeat = setInterval(() => {
       if (closed) return
       stream
         .writeSSE({
@@ -131,7 +142,7 @@ notificationRoutes.get("/stream", async (c) => {
         .catch(() => {
           cleanup()
         })
-    }, 15000)
+    }, SSE_HEARTBEAT_INTERVAL_MS)
 
     stream.onAbort(() => {
       cleanup()
