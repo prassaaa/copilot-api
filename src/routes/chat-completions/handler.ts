@@ -220,7 +220,21 @@ async function writeKeepAlive(
   responseId: string | null,
   model: string,
 ): Promise<boolean> {
-  if (!responseId) return true
+  // Before any real data arrives, forward pings as SSE comment-style events
+  // so the client connection stays alive. Without this, clients behind a
+  // reverse proxy (VPS/HTTPS) may timeout waiting for the first byte during
+  // long model processing times (10-30+ seconds).
+  if (!responseId) {
+    try {
+      await stream.writeSSE({ event: "ping", data: "{}" })
+      return true
+    } catch {
+      consola.warn(
+        "Failed to write pre-data ping, client may have disconnected",
+      )
+      return false
+    }
+  }
   const chunk: ChatCompletionChunk = {
     id: responseId,
     object: "chat.completion.chunk",
