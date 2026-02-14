@@ -50,7 +50,7 @@ A reverse-engineered proxy server that transforms the GitHub Copilot API into **
 ### Core Features
 | Feature | Description |
 |---------|-------------|
-| **OpenAI API Compatible** | Exposes `/v1/chat/completions`, `/v1/models`, `/v1/embeddings` endpoints |
+| **OpenAI API Compatible** | Exposes `/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings` endpoints |
 | **Anthropic API Compatible** | Exposes `/v1/messages` and `/v1/messages/count_tokens` endpoints |
 | **Streaming Support** | Full support for streaming responses (SSE) |
 | **Multiple Account Types** | Supports Individual, Business, and Enterprise Copilot plans |
@@ -169,10 +169,14 @@ bun run debug [options]
 |----------|--------|-------------|
 | `/v1/chat/completions` | `POST` | Create chat completion |
 | `/chat/completions` | `POST` | Create chat completion (alias) |
+| `/v1/responses` | `POST` | Create response (for Codex models) |
+| `/responses` | `POST` | Create response (alias) |
 | `/v1/models` | `GET` | List available models |
 | `/models` | `GET` | List available models (alias) |
 | `/v1/embeddings` | `POST` | Create embeddings |
 | `/embeddings` | `POST` | Create embeddings (alias) |
+
+> **Note:** Codex models (e.g., `gpt-5.2-codex`, `gpt-5.3-codex`) are only accessible via the `/v1/responses` endpoint. They do not support `/v1/chat/completions`. The Responses API follows the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) format and supports both streaming and non-streaming modes.
 
 ### Anthropic Compatible Endpoints
 
@@ -394,6 +398,20 @@ curl http://localhost:4141/v1/chat/completions \
   }'
 ```
 
+#### OpenAI Responses Format (Codex Models)
+
+```bash
+curl http://localhost:4141/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.2-codex",
+    "stream": true,
+    "input": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
 #### Anthropic Format
 
 ```bash
@@ -433,9 +451,10 @@ copilot-api/
 │   │   ├── fallback.ts      # Model fallback logic
 │   │   └── ...
 │   ├── routes/              # API route handlers
-│   │   ├── chat-completions.ts
-│   │   ├── embeddings.ts
-│   │   ├── models.ts
+│   │   ├── chat-completions/ # OpenAI /v1/chat/completions
+│   │   ├── responses/       # OpenAI /v1/responses (Codex models)
+│   │   ├── embeddings/      # OpenAI /v1/embeddings
+│   │   ├── models/          # Model listing
 │   │   └── messages/        # Anthropic format handlers
 │   ├── services/            # External service integrations
 │   │   └── copilot.ts       # GitHub Copilot API client
