@@ -96,6 +96,7 @@ describe("tool-loop guard", () => {
 
       expect(result.applied).toBe(true)
       expect(result.payload.tool_choice).toBe("none")
+      expect(result.payload.tools).toBeNull()
       const lastMessage = result.payload.messages.at(-1)
       expect(lastMessage).toMatchObject({ role: "developer" })
     } finally {

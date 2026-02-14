@@ -72,6 +72,7 @@ export function applyToolLoopGuard(payload: ChatCompletionsPayload): {
     payload: {
       ...payload,
       tool_choice: "none",
+      tools: null,
       messages: [...payload.messages, guardMessage],
     },
     applied: true,
