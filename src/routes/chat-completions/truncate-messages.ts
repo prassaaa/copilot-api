@@ -113,6 +113,30 @@ function resolvePromptReserve(
   return baselineReserve
 }
 
+/**
+ * Get safety multiplier for models with tokenizer mismatch.
+ * Non-OpenAI models (Gemini, etc.) use different tokenizers, so our
+ * GPT-based token counting may underestimate actual token usage.
+ * Apply a safety margin to avoid exceeding the real limit.
+ */
+function getTokenizerSafetyMultiplier(modelId: string): number {
+  // Gemini models: their tokenizer typically produces ~40-70% more tokens
+  // than GPT tokenizers for the same content
+  if (modelId.startsWith("gemini")) {
+    return 0.5 // Use only 50% of calculated limit for safety
+  }
+  // Other non-OpenAI models may also have tokenizer differences
+  if (
+    !modelId.startsWith("gpt-")
+    && !modelId.startsWith("o1")
+    && !modelId.startsWith("o3")
+    && !modelId.startsWith("o4")
+  ) {
+    return 0.7 // Use 70% for other non-OpenAI models
+  }
+  return 1.0 // OpenAI models use accurate tokenizer
+}
+
 export function resolvePromptTokenLimit(
   limits:
     | {
@@ -121,14 +145,18 @@ export function resolvePromptTokenLimit(
         max_output_tokens?: number
       }
     | undefined,
+  modelId?: string,
 ): number | null {
+  const safetyMultiplier = modelId ? getTokenizerSafetyMultiplier(modelId) : 1.0
+
   if (limits?.max_prompt_tokens) {
     const promptLimit = limits.max_prompt_tokens
     const outputReserve = resolvePromptReserve(
       promptLimit,
       limits.max_output_tokens,
     )
-    return Math.max(promptLimit - outputReserve, 1024)
+    const effectiveLimit = Math.max(promptLimit - outputReserve, 1024)
+    return Math.floor(effectiveLimit * safetyMultiplier)
   }
 
   if (limits?.max_context_window_tokens) {
@@ -137,7 +165,8 @@ export function resolvePromptTokenLimit(
       limits.max_output_tokens ?
         Math.min(limits.max_output_tokens, Math.floor(contextWindow * 0.1))
       : Math.max(4096, Math.floor(contextWindow * 0.1))
-    return contextWindow - outputReserve
+    const effectiveLimit = contextWindow - outputReserve
+    return Math.floor(effectiveLimit * safetyMultiplier)
   }
 
   return null
@@ -167,6 +196,7 @@ export async function truncateMessages(
 
   const maxPromptTokens = resolvePromptTokenLimit(
     selectedModel.capabilities.limits,
+    payload.model,
   )
   if (!maxPromptTokens) return payload
 

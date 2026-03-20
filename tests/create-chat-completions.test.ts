@@ -166,6 +166,11 @@ test("falls back to string content for fully unsupported parts", async () => {
 test("falls back to lower claude-opus tier before other families", async () => {
   const previousFetch = (globalThis as unknown as { fetch: typeof fetch }).fetch
   const calledModels: Array<string> = []
+  const capturedBodies: Array<{
+    model?: string
+    reasoning_effort?: string
+    thinking?: unknown
+  }> = []
   let requestCount = 0
 
   const fallbackFetchMock = mock(
@@ -175,8 +180,13 @@ test("falls back to lower claude-opus tier before other families", async () => {
         body?: string
       },
     ) => {
-      const requestBody = JSON.parse(opts.body ?? "{}") as { model?: string }
+      const requestBody = JSON.parse(opts.body ?? "{}") as {
+        model?: string
+        reasoning_effort?: string
+        thinking?: unknown
+      }
       calledModels.push(requestBody.model ?? "")
+      capturedBodies.push(requestBody)
 
       if (requestCount === 0) {
         requestCount++
@@ -228,6 +238,13 @@ test("falls back to lower claude-opus tier before other families", async () => {
     })
 
     expect(calledModels).toEqual(["claude-opus-4.6", "claude-opus-4.5"])
+    expect(capturedBodies[0]?.reasoning_effort).toBeUndefined()
+    expect(capturedBodies[0]?.thinking).toBeUndefined()
+    expect(capturedBodies[1]?.reasoning_effort).toBe("high")
+    expect(capturedBodies[1]?.thinking).toEqual({
+      type: "enabled",
+      effort: "high",
+    })
     expect((result as { model?: string }).model).toBe("claude-opus-4.5")
   } finally {
     ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
@@ -237,6 +254,11 @@ test("falls back to lower claude-opus tier before other families", async () => {
 test("falls back to lower claude-sonnet tier before other families", async () => {
   const previousFetch = (globalThis as unknown as { fetch: typeof fetch }).fetch
   const calledModels: Array<string> = []
+  const capturedBodies: Array<{
+    model?: string
+    reasoning_effort?: string
+    thinking?: unknown
+  }> = []
   let requestCount = 0
 
   const fallbackFetchMock = mock(
@@ -246,8 +268,13 @@ test("falls back to lower claude-sonnet tier before other families", async () =>
         body?: string
       },
     ) => {
-      const requestBody = JSON.parse(opts.body ?? "{}") as { model?: string }
+      const requestBody = JSON.parse(opts.body ?? "{}") as {
+        model?: string
+        reasoning_effort?: string
+        thinking?: unknown
+      }
       calledModels.push(requestBody.model ?? "")
+      capturedBodies.push(requestBody)
 
       if (requestCount === 0) {
         requestCount++
@@ -299,6 +326,13 @@ test("falls back to lower claude-sonnet tier before other families", async () =>
     })
 
     expect(calledModels).toEqual(["claude-sonnet-4.5", "claude-sonnet-4"])
+    expect(capturedBodies[0]?.reasoning_effort).toBe("high")
+    expect(capturedBodies[0]?.thinking).toEqual({
+      type: "enabled",
+      effort: "high",
+    })
+    expect(capturedBodies[1]?.reasoning_effort).toBeUndefined()
+    expect(capturedBodies[1]?.thinking).toBeUndefined()
     expect((result as { model?: string }).model).toBe("claude-sonnet-4")
   } finally {
     ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch

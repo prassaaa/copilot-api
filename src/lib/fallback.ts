@@ -58,10 +58,16 @@ export function getFallbackModels(model: string): Array<string> {
 
 /**
  * Check if a model is available
+ * Handles models with effort level suffix (e.g., claude-opus-4.5(high))
  */
 export function isModelAvailable(modelId: string): boolean {
   if (!state.models) return false
-  return state.models.data.some((m) => m.id === modelId)
+
+  // Parse model name to extract base model (strip effort level suffix)
+  const match = modelId.match(/^(.+)\((?:low|medium|high|xhigh)\)$/)
+  const baseModelId = match ? match[1] : modelId
+
+  return state.models.data.some((m) => m.id === baseModelId)
 }
 
 /**

@@ -27,6 +27,30 @@ function getErrorMessage(error: unknown): string {
   return String(error)
 }
 
+/**
+ * Format error for logging purposes.
+ * This prevents DOMException and similar objects from printing all their
+ * static properties (like error code constants) which pollute the logs.
+ */
+export function formatErrorForLog(error: unknown): string {
+  if (error instanceof Error) {
+    // For DOMException and similar, just return name + message
+    // This avoids logging all the static error code constants
+    const name = error.name || "Error"
+    const message = error.message || "Unknown error"
+    return `${name}: ${message}`
+  }
+  if (typeof error === "string") {
+    return error
+  }
+  // For other objects, try to get a reasonable string representation
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }

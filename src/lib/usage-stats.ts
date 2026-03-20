@@ -108,11 +108,11 @@ async function save(): Promise<void> {
 }
 
 /**
- * Prune old data (keep last 30 days)
+ * Prune old data (keep last 365 days)
  */
 function prune(): void {
   const now = new Date()
-  const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
 
   let pruned = false
   for (const key of history.keys()) {

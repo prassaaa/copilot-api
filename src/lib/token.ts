@@ -15,7 +15,7 @@ import { getDeviceCode } from "~/services/github/get-device-code"
 import { getGitHubUser } from "~/services/github/get-user"
 import { pollAccessToken } from "~/services/github/poll-access-token"
 
-import { HTTPError } from "./error"
+import { formatErrorForLog, HTTPError } from "./error"
 import { state } from "./state"
 
 // Constants for token refresh retry logic
@@ -87,8 +87,7 @@ export const setupCopilotToken = async (tokenOverride?: string) => {
         return // Success, exit
       } catch (error) {
         consola.error(
-          `Failed to refresh Copilot token (attempt ${attempt}/${MAX_TOKEN_REFRESH_RETRIES}):`,
-          error,
+          `Failed to refresh Copilot token (attempt ${attempt}/${MAX_TOKEN_REFRESH_RETRIES}): ${formatErrorForLog(error)}`,
         )
         if (attempt < MAX_TOKEN_REFRESH_RETRIES) {
           await sleep(attempt * 5000) // Exponential backoff

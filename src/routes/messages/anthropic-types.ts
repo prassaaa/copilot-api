@@ -19,10 +19,13 @@ export interface AnthropicMessagesPayload {
     name?: string
   }
   thinking?: {
-    type: "enabled"
+    type: "enabled" | "adaptive"
     budget_tokens?: number
   }
   service_tier?: "auto" | "standard_only"
+  output_config?: {
+    effort?: "low" | "medium" | "high" | "max"
+  }
 }
 
 export interface AnthropicTextBlock {
@@ -39,10 +42,28 @@ export interface AnthropicImageBlock {
   }
 }
 
+export interface AnthropicToolResultContentItem {
+  type: "text"
+  text: string
+}
+
+export interface AnthropicToolResultImageItem {
+  type: "image"
+  source: {
+    type: "base64"
+    media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+    data: string
+  }
+}
+
+export type AnthropicToolResultContent =
+  | string
+  | Array<AnthropicToolResultContentItem | AnthropicToolResultImageItem>
+
 export interface AnthropicToolResultBlock {
   type: "tool_result"
   tool_use_id: string
-  content: string
+  content: AnthropicToolResultContent
   is_error?: boolean
 }
 
@@ -56,6 +77,7 @@ export interface AnthropicToolUseBlock {
 export interface AnthropicThinkingBlock {
   type: "thinking"
   thinking: string
+  signature: string
 }
 
 export type AnthropicUserContentBlock =
@@ -196,6 +218,7 @@ export interface AnthropicStreamState {
   messageStartSent: boolean
   contentBlockIndex: number
   contentBlockOpen: boolean
+  thinkingBlockOpen: boolean
   toolCalls: {
     [openAIToolIndex: number]: {
       id: string

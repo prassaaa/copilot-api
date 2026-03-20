@@ -215,9 +215,9 @@ let customPricing: Record<string, ModelPricing> = {}
 let costHistory: Array<CostHistoryEntry> = []
 let isDirty = false
 
-// Retention settings
-const MAX_HISTORY_ENTRIES = 10000
-const HISTORY_RETENTION_DAYS = 30
+// Retention settings - unlimited history
+const MAX_HISTORY_ENTRIES = Infinity // No limit on number of entries
+const HISTORY_RETENTION_DAYS = 365 // Keep 1 year of history
 
 /**
  * Ensure config directory exists

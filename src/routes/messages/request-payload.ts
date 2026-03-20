@@ -134,7 +134,11 @@ function parseAssistantContentBlock(
   }
 
   if (block.type === "thinking" && typeof block.thinking === "string") {
-    return { type: "thinking", thinking: block.thinking }
+    return {
+      type: "thinking",
+      thinking: block.thinking,
+      signature: typeof block.signature === "string" ? block.signature : "",
+    }
   }
 
   return null

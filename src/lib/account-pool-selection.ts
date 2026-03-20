@@ -18,7 +18,7 @@ function resetExpiredRateLimits(): AccountStatus | null {
       account.rateLimited
       && account.rateLimitResetAt
       && account.rateLimitResetAt <= now
-      && !account.paused
+      && account.paused !== true
     ) {
       account.rateLimited = false
       account.rateLimitResetAt = undefined
@@ -69,22 +69,42 @@ function selectByQuota(activeAccounts: Array<AccountStatus>): AccountStatus {
   return sorted[0]
 }
 
+const QUOTA_THRESHOLD_PERCENT = 5
+
 export function selectAccount(): AccountStatus | null {
   if (!poolConfig.enabled || poolState.accounts.length === 0) {
     return null
   }
 
   // Use cached active accounts instead of filtering every time
-  const activeAccounts = getActiveAccounts()
+  // Also filter out accounts with depleted quota
+  const allActiveAccounts = getActiveAccounts()
+  const activeAccounts = allActiveAccounts.filter((a) => {
+    const quotaPercent = getEffectiveQuotaPercent(a)
+    return quotaPercent > QUOTA_THRESHOLD_PERCENT
+  })
 
   if (activeAccounts.length === 0) {
     const resetAccount = resetExpiredRateLimits()
     if (resetAccount) {
-      poolState.lastSelectedId = resetAccount.id
-      return resetAccount
+      const quotaPercent = getEffectiveQuotaPercent(resetAccount)
+      if (quotaPercent > QUOTA_THRESHOLD_PERCENT) {
+        poolState.lastSelectedId = resetAccount.id
+        return resetAccount
+      }
     }
 
-    consola.warn("No active accounts available in pool")
+    // If no accounts with sufficient quota, log which accounts are available but depleted
+    if (allActiveAccounts.length > 0) {
+      const depletedAccounts = allActiveAccounts.map(
+        (a) => `${a.login}(${getEffectiveQuotaPercent(a).toFixed(1)}%)`,
+      )
+      consola.warn(
+        `All active accounts have depleted quota: ${depletedAccounts.join(", ")}`,
+      )
+    } else {
+      consola.warn("No active accounts available in pool")
+    }
     return null
   }
 
@@ -137,10 +157,14 @@ export function selectAccount(): AccountStatus | null {
 export function findNextAvailableAccount(
   excludeId: string,
 ): AccountStatus | null {
-  // Use cached active accounts and filter out excluded
-  const availableAccounts = getActiveAccounts().filter(
-    (a) => a.id !== excludeId,
-  )
+  // Use cached active accounts and filter out excluded AND accounts with depleted quota
+  const availableAccounts = getActiveAccounts().filter((a) => {
+    if (a.id === excludeId) return false
+    // Skip accounts with depleted quota
+    const quotaPercent = getEffectiveQuotaPercent(a)
+    if (quotaPercent <= QUOTA_THRESHOLD_PERCENT) return false
+    return true
+  })
   if (availableAccounts.length === 0) return null
   return availableAccounts.reduce((best, current) => {
     const bestQuota = getEffectiveQuotaPercent(best)

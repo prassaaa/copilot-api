@@ -66,7 +66,7 @@ export function invalidateActiveAccountsCache(): void {
 export function getActiveAccounts(): Array<AccountStatus> {
   if (cachedActiveAccounts === null) {
     cachedActiveAccounts = poolState.accounts.filter(
-      (a) => a.active && !a.rateLimited && !a.paused,
+      (a) => a.active && !a.rateLimited && a.paused !== true,
     )
   }
   return cachedActiveAccounts
@@ -95,8 +95,24 @@ export async function loadPoolState(): Promise<void> {
     await ensureDir()
     const data = await fs.readFile(POOL_FILE)
     const saved = JSON.parse(data.toString()) as Partial<PoolState>
+
+    // Dedupe accounts by id, keeping the first occurrence (which has correct paused state)
+    const seenIds = new Set<string>()
+    const dedupedAccounts = (saved.accounts ?? []).filter((a) => {
+      if (!a.id || seenIds.has(a.id)) return false
+      seenIds.add(a.id)
+      return true
+    })
+
+    const removedCount = (saved.accounts?.length ?? 0) - dedupedAccounts.length
+    if (removedCount > 0) {
+      consola.warn(
+        `loadPoolState: removed ${removedCount} duplicate account(s)`,
+      )
+    }
+
     poolState = {
-      accounts: saved.accounts ?? [],
+      accounts: dedupedAccounts,
       currentIndex: saved.currentIndex ?? 0,
       stickyAccountId: saved.stickyAccountId,
       lastSelectedId: saved.lastSelectedId,

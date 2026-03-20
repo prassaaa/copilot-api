@@ -1,7 +1,5 @@
 import { execSync } from "node:child_process"
 
-const REPO_OWNER = "prassaaa"
-const REPO_NAME = "copilot-api"
 const DEFAULT_BRANCH = "main"
 const CACHE_TTL_MS = 5 * 60 * 1000
 
@@ -25,21 +23,15 @@ function getLocalCommit(): string {
   return execSync("git rev-parse HEAD", { stdio: "pipe" }).toString().trim()
 }
 
-async function getRemoteCommit(): Promise<string> {
-  const response = await fetch(
-    `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits/${DEFAULT_BRANCH}`,
-  )
-  if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status}`)
-  }
-  const data = (await response.json()) as { sha?: string }
-  if (!data.sha) {
-    throw new Error("Invalid GitHub API response")
-  }
-  return data.sha
+function getRemoteCommitFromGit(): string {
+  // Fetch latest from remote and get the commit hash
+  execSync("git fetch origin --quiet", { stdio: "pipe" })
+  return execSync(`git rev-parse origin/${DEFAULT_BRANCH}`, { stdio: "pipe" })
+    .toString()
+    .trim()
 }
 
-export async function checkVersion(): Promise<VersionCheckResult> {
+export function checkVersion(): VersionCheckResult {
   const now = Date.now()
   if (cachedResult && now - lastChecked < CACHE_TTL_MS) {
     return cachedResult
@@ -49,7 +41,7 @@ export async function checkVersion(): Promise<VersionCheckResult> {
 
   try {
     const local = getLocalCommit()
-    const remote = await getRemoteCommit()
+    const remote = getRemoteCommitFromGit()
 
     const result: VersionCheckResult =
       local === remote ?

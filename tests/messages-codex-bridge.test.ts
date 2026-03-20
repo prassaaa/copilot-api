@@ -33,6 +33,7 @@ test("routes /v1/messages codex requests through responses API", async () => {
   const previousManualApprove = state.manualApprove
 
   const calledPaths: Array<string> = []
+  const capturedPayloads: Array<Record<string, unknown>> = []
   const fetchMock = mock((url: string, options?: { body?: string }) => {
     const path = new URL(url).pathname
     calledPaths.push(path)
@@ -40,8 +41,22 @@ test("routes /v1/messages codex requests through responses API", async () => {
     if (path === "/responses") {
       const payload = JSON.parse(options?.body ?? "{}") as {
         model?: string
+        reasoning?: { effort?: string; summary?: string }
+        include?: Array<string>
+        temperature?: number
+        store?: boolean
+        parallel_tool_calls?: boolean
       }
+      capturedPayloads.push(payload)
       expect(payload.model).toBe("gpt-5.3-codex")
+      expect(payload.reasoning).toEqual({
+        effort: "xhigh",
+        summary: "detailed",
+      })
+      expect(payload.include).toEqual(["reasoning.encrypted_content"])
+      expect(payload.temperature).toBe(1)
+      expect(payload.store).toBe(false)
+      expect(payload.parallel_tool_calls).toBe(true)
 
       return new Response(
         JSON.stringify({
@@ -88,6 +103,30 @@ test("routes /v1/messages codex requests through responses API", async () => {
       )
     }
 
+    // Handle /chat/completions for quota optimizer small model requests
+    if (path === "/chat/completions") {
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-test",
+          object: "chat.completion",
+          created: 1_770_000_000,
+          model: "gpt-5-mini",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "OK" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    }
+
     return new Response(
       JSON.stringify({
         error: {
@@ -114,6 +153,7 @@ test("routes /v1/messages codex requests through responses API", async () => {
     data: [
       createModel("gpt-5.3-codex", ["/responses"]),
       createModel("gpt-5.1", ["/chat/completions"]),
+      createModel("gpt-5-mini", ["/chat/completions"]),
     ],
   }
 
@@ -125,6 +165,14 @@ test("routes /v1/messages codex requests through responses API", async () => {
         model: "gpt-5.3-codex",
         max_tokens: 64,
         messages: [{ role: "user", content: "Hai" }],
+        // Add tools to prevent quota optimizer from switching to small model
+        tools: [
+          {
+            name: "test_tool",
+            description: "test",
+            input_schema: { type: "object" },
+          },
+        ],
       }),
     })
 
@@ -140,7 +188,6 @@ test("routes /v1/messages codex requests through responses API", async () => {
     })
     expect(calledPaths).toEqual(["/responses"])
   } finally {
-    // @ts-expect-error - restore original global fetch
     ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
     Object.assign(state, {
       models: previousModels,
@@ -164,6 +211,30 @@ test("routes /v1/messages codex requests through responses API when model metada
   const fetchMock = mock((url: string) => {
     const path = new URL(url).pathname
     calledPaths.push(path)
+
+    // Handle /chat/completions for quota optimizer small model requests
+    if (path === "/chat/completions") {
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-test",
+          object: "chat.completion",
+          created: 1_770_000_000,
+          model: "gpt-5-mini",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "OK" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
+    }
 
     if (path !== "/responses") {
       return new Response(
@@ -234,7 +305,10 @@ test("routes /v1/messages codex requests through responses API when model metada
   state.manualApprove = false
   state.models = {
     object: "list",
-    data: [createModel("gpt-5.3-codex", ["/chat/completions"])],
+    data: [
+      createModel("gpt-5.3-codex", ["/chat/completions"]),
+      createModel("gpt-5-mini", ["/chat/completions"]),
+    ],
   }
 
   try {
@@ -245,6 +319,14 @@ test("routes /v1/messages codex requests through responses API when model metada
         model: "gpt-5.3-codex",
         max_tokens: 64,
         messages: [{ role: "user", content: "Hai lagi" }],
+        // Add tools to prevent quota optimizer from switching to small model
+        tools: [
+          {
+            name: "test_tool",
+            description: "test",
+            input_schema: { type: "object" },
+          },
+        ],
       }),
     })
 
@@ -255,7 +337,6 @@ test("routes /v1/messages codex requests through responses API when model metada
     expect(body.model).toBe("gpt-5.3-codex")
     expect(calledPaths).toEqual(["/responses"])
   } finally {
-    // @ts-expect-error - restore original global fetch
     ;(globalThis as unknown as { fetch: typeof fetch }).fetch = previousFetch
     Object.assign(state, {
       models: previousModels,

@@ -11,6 +11,10 @@ import path from "node:path"
 import { registerInterval } from "./intervals"
 import { registerShutdownHandler } from "./shutdown"
 
+// Event emitter for SSE streaming
+export const historyEmitter = new EventTarget()
+export const HISTORY_ENTRY_EVENT = "history-entry"
+
 export interface RequestHistoryEntry {
   id: string
   timestamp: number
@@ -39,9 +43,9 @@ export interface RequestHistoryFilter {
 const CONFIG_DIR = path.join(os.homedir(), ".config", "copilot-api")
 const HISTORY_FILE = path.join(CONFIG_DIR, "request-history.json")
 
-// Configuration
-const MAX_ENTRIES = 1000
-const RETENTION_DAYS = 7
+// Configuration - unlimited history
+const MAX_ENTRIES = Infinity // No limit on number of entries
+const RETENTION_DAYS = 365 // Keep 1 year of history
 
 // In-memory state
 let history: Array<RequestHistoryEntry> = []
@@ -151,6 +155,11 @@ export function recordRequest(
 
   history.push(record)
   isDirty = true
+
+  // Emit event for SSE streaming
+  historyEmitter.dispatchEvent(
+    new CustomEvent(HISTORY_ENTRY_EVENT, { detail: record }),
+  )
 
   // Prune if needed
   if (history.length > MAX_ENTRIES) {

@@ -1,7 +1,10 @@
 import type {
+  ResponseContextManagementCompactionItem,
   ResponseInputItem,
   ResponsesPayload,
 } from "~/services/copilot/create-responses"
+
+import { isResponsesApiContextManagementModel } from "~/lib/config"
 
 export const getResponsesRequestOptions = (
   payload: ResponsesPayload,
@@ -71,4 +74,101 @@ const containsVisionContent = (value: unknown): boolean => {
   }
 
   return false
+}
+
+// ============================================================================
+// COMPACTION UTILITIES
+// ============================================================================
+
+/**
+ * Resolve compact threshold based on max prompt tokens
+ * Default: 50000, or 90% of maxPromptTokens if provided
+ */
+export const resolveResponsesCompactThreshold = (
+  maxPromptTokens?: number,
+): number => {
+  if (typeof maxPromptTokens === "number" && maxPromptTokens > 0) {
+    return Math.floor(maxPromptTokens * 0.9)
+  }
+  return 50000
+}
+
+/**
+ * Create compaction context management config
+ */
+const createCompactionContextManagement = (
+  compactThreshold: number,
+): Array<ResponseContextManagementCompactionItem> => [
+  {
+    type: "compaction",
+    compact_threshold: compactThreshold,
+  },
+]
+
+/**
+ * Apply context management to payload if model supports it
+ */
+export const applyResponsesApiContextManagement = (
+  payload: ResponsesPayload,
+  maxPromptTokens?: number,
+): void => {
+  // Don't override if already set
+  if (payload.context_management !== undefined) {
+    return
+  }
+
+  // Only apply for supported models
+  if (!isResponsesApiContextManagementModel(payload.model)) {
+    return
+  }
+
+  payload.context_management = createCompactionContextManagement(
+    resolveResponsesCompactThreshold(maxPromptTokens),
+  )
+}
+
+/**
+ * Compact input by keeping only messages from latest compaction point
+ */
+export const compactInputByLatestCompaction = (
+  payload: ResponsesPayload,
+): void => {
+  if (!Array.isArray(payload.input) || payload.input.length === 0) {
+    return
+  }
+
+  const latestCompactionMessageIndex = getLatestCompactionMessageIndex(
+    payload.input,
+  )
+
+  if (latestCompactionMessageIndex === undefined) {
+    return
+  }
+
+  payload.input = payload.input.slice(latestCompactionMessageIndex)
+}
+
+/**
+ * Find index of latest compaction message in input array
+ */
+const getLatestCompactionMessageIndex = (
+  input: Array<ResponseInputItem>,
+): number | undefined => {
+  for (let index = input.length - 1; index >= 0; index -= 1) {
+    if (isCompactionInputItem(input[index])) {
+      return index
+    }
+  }
+  return undefined
+}
+
+/**
+ * Check if an input item is a compaction item
+ */
+const isCompactionInputItem = (value: ResponseInputItem): boolean => {
+  return (
+    "type" in value
+    && typeof value.type === "string"
+    && value.type === "compaction"
+  )
 }

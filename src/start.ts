@@ -25,7 +25,12 @@ import {
   setupGitHubToken,
 } from "./lib/token"
 import { usageStats } from "./lib/usage-stats"
-import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
+import {
+  cacheMacMachineId,
+  cacheModels,
+  cacheVSCodeVersion,
+  cacheVsCodeSessionId,
+} from "./lib/utils"
 import { webhook } from "./lib/webhook"
 import { server } from "./server"
 import { initSessionCleanup } from "./webui/routes"
@@ -133,6 +138,9 @@ async function setupClaudeCodeIntegration(serverUrl: string): Promise<void> {
 async function initializeServices(config: Config): Promise<void> {
   await ensurePaths()
   await cacheVSCodeVersion()
+  // Cache machine and session IDs
+  cacheMacMachineId()
+  cacheVsCodeSessionId()
   await usageStats.init()
   await requestHistory.init()
   await requestCache.init()

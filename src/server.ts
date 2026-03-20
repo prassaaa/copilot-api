@@ -4,6 +4,7 @@ import { cors } from "hono/cors"
 
 import { logEmitter } from "./lib/logger"
 import { createAuthMiddleware } from "./lib/request-auth"
+import { traceIdMiddleware } from "./lib/trace"
 import { accountLimitsRoute } from "./routes/account-limits/route"
 import { completionRoutes } from "./routes/chat-completions/route"
 import { embeddingRoutes } from "./routes/embeddings/route"
@@ -59,6 +60,9 @@ server.use(async (c, next) => {
 })
 
 server.use(cors())
+
+// Trace ID middleware
+server.use(traceIdMiddleware)
 
 const apiAuthMiddleware = createAuthMiddleware()
 server.use("/chat/*", apiAuthMiddleware)

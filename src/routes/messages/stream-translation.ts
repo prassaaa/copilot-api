@@ -6,6 +6,14 @@ import {
 } from "./anthropic-types"
 import { mapOpenAIStopReasonToAnthropic } from "./utils"
 
+// Error classes
+export class FunctionCallArgumentsValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "FunctionCallArgumentsValidationError"
+  }
+}
+
 function isToolBlockOpen(state: AnthropicStreamState): boolean {
   if (!state.contentBlockOpen) {
     return false

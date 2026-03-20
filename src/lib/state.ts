@@ -14,6 +14,9 @@ export interface State {
   accountType: string
   models?: ModelsResponse
   vsCodeVersion?: string
+  macMachineId?: string
+  vsCodeSessionId?: string
+  verbose?: boolean
 
   manualApprove: boolean
   rateLimitWait: boolean

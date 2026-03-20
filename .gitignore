@@ -3,12 +3,68 @@ node_modules/
 
 # local env
 *.local
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env*.local
 
 # aider
 .aider*
 
 # eslint cache
 .eslintcache
+.stylelintcache
+.prettiercache
 
 # build output
 dist/
+build/
+coverage/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# os generated
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ide
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# cache
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.output/
+.turbo/
+
+# temp
+*.tmp
+*.temp
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# test coverage
+.nyc_output/
+*.tsbuildinfo
+
+# misc
+.npm/
+.yarn-integrity
+.lock-wscript
+*.tgz

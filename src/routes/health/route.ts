@@ -83,7 +83,7 @@ healthRoutes.get("/detailed", async (c) => {
   const poolEnabled = await isPoolEnabled()
   const accounts = poolEnabled ? await getAccountsStatus() : []
   const activeAccounts = accounts.filter(
-    (a) => a.active && !a.rateLimited && !a.paused,
+    (a) => a.active && !a.rateLimited && a.paused !== true,
   )
 
   // Check models

@@ -1,555 +1,266 @@
-# Copilot API Proxy
+<p align="center">
+  <img src="public/favicon.svg" width="80" height="80" alt="Copilot API Logo" />
+</p>
 
-> **⚠️ WARNING**
-> This is a reverse-engineered proxy of GitHub Copilot API. It is not officially supported by GitHub and may break unexpectedly. Use at your own risk.
+<h1 align="center">Copilot API</h1>
 
-> **⚠️ GitHub Security Notice**
-> Excessive automated or scripted use of Copilot (including rapid or bulk requests) may trigger GitHub's abuse-detection systems. You may receive a warning from GitHub Security, and further anomalous activity could result in temporary suspension of your Copilot access.
+<p align="center">
+  <strong>Proxy server yang mengkonversi GitHub Copilot API ke format OpenAI & Anthropic — dengan dashboard management mobile-friendly untuk multi-account, quota monitoring, dan API playground.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/el-pablos/copilot-api/actions"><img src="https://img.shields.io/github/actions/workflow/status/el-pablos/copilot-api/ci.yml?branch=main&style=flat-square&label=CI" alt="Build Status" /></a>
+  <img src="https://img.shields.io/github/package-json/v/el-pablos/copilot-api?style=flat-square&color=fe8019" alt="Version" />
+  <img src="https://img.shields.io/badge/runtime-Bun%20%E2%89%A51.2-b8bb26?style=flat-square" alt="Bun" />
+  <img src="https://img.shields.io/badge/theme-Gruvbox%20Dark-282828?style=flat-square" alt="Gruvbox Theme" />
+  <img src="https://img.shields.io/github/license/el-pablos/copilot-api?style=flat-square" alt="License" />
+</p>
+
+---
+
+> **Peringatan**: Ini adalah reverse-engineered proxy dari GitHub Copilot API. Tidak didukung resmi oleh GitHub dan bisa berhenti berfungsi kapan saja. Gunakan dengan risiko sendiri.
 >
-> Please review:
-> - [GitHub Acceptable Use Policies](https://docs.github.com/site-policy/acceptable-use-policies/github-acceptable-use-policies#4-spam-and-inauthentic-activity-on-github)
-> - [GitHub Copilot Terms](https://docs.github.com/site-policy/github-terms/github-terms-for-additional-products-and-features#github-copilot)
+> **Catatan Keamanan GitHub**: Penggunaan berlebihan atau otomatis terhadap Copilot bisa memicu sistem deteksi abuse GitHub. Pastikan kamu review [GitHub Acceptable Use Policies](https://docs.github.com/site-policy/acceptable-use-policies) dan [GitHub Copilot Terms](https://docs.github.com/site-policy/github-terms/github-terms-for-additional-products-and-features#github-copilot).
 
 ---
 
-## Screenshots
+## Apa itu Copilot API?
 
-### Dashboard
-![Dashboard](screenshots/dashboard.png)
+**Copilot API** adalah proxy server yang bikin kamu bisa pakai GitHub Copilot dari tools apa aja yang support format OpenAI atau Anthropic API. Jadi kalau kamu punya akses GitHub Copilot, kamu bisa gunain buat:
 
-### Available Models
-![Available Models](screenshots/models.png)
+- **Claude Code** — langsung connect tanpa perlu API key Anthropic
+- **Tools OpenAI-compatible** — apapun yang bisa kirim request ke `/v1/chat/completions`
+- **Custom app** — bikin aplikasi sendiri yang pakai model-model Copilot
 
-### Usage & Quotas 
-![Usage & Quotas](screenshots/usage.png)
+Masalah yang diselesaikan: GitHub Copilot itu powerful banget, tapi API-nya proprietary dan nggak bisa dipake langsung sama tools third-party. Copilot API jadi jembatan antara Copilot dan ekosistem OpenAI/Anthropic.
 
-### Manage Accounts
-![Manage Accounts](screenshots/accounts.png)
+## Fitur Utama
 
-### Server Logs
-![Server Logs](screenshots/logs.png)
+- **Multi-Format API** — Support OpenAI Chat Completions, Anthropic Messages, dan Embeddings
+- **Dashboard Mobile-First** — WebUI management responsive yang bisa diakses dari HP
+- **Multi-Account Pool** — Rotasi otomatis antar beberapa akun GitHub (4 strategi: sticky, round-robin, quota-based, hybrid)
+- **Quota Monitoring** — Real-time tracking penggunaan per akun (Chat, Completions, Premium)
+- **API Playground** — Test endpoint langsung dari dashboard dengan preset templates
+- **Real-time Logs** — Server-Sent Events streaming log dengan filter dan export
+- **Request History** — Audit trail lengkap semua request dengan cost estimation
+- **Claude CLI Integration** — One-click config deployment untuk Claude Code
+- **OAuth Device Flow** — Tambah akun GitHub tanpa copy-paste token
+- **Rate Limiting** — Kontrol interval request dengan opsi wait atau error
+- **Model Fallback** — Auto-fallback ke model lain kalau yang diminta nggak available
+- **Cache & Queue** — Caching response dan queue management untuk reliability
 
-### Settings Control
-![Settings Control](screenshots/settings.png)
+## Arsitektur
 
-### Request History
-![Request History](screenshots/history.png)
+### Request Pipeline
 
-### API Playground
-![API Playground](screenshots/playground.png)
----
-
-## Overview
-
-A reverse-engineered proxy server that transforms the GitHub Copilot API into **OpenAI-compatible** and **Anthropic-compatible** endpoints. This enables you to use GitHub Copilot with any tool that supports the OpenAI Chat Completions API or the Anthropic Messages API, including [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
-
----
-
-## Features
-
-### Core Features
-| Feature | Description |
-|---------|-------------|
-| **OpenAI API Compatible** | Exposes `/v1/chat/completions`, `/v1/responses`, `/v1/models`, `/v1/embeddings` endpoints |
-| **Anthropic API Compatible** | Exposes `/v1/messages` and `/v1/messages/count_tokens` endpoints |
-| **Streaming Support** | Full support for streaming responses (SSE) |
-| **Multiple Account Types** | Supports Individual, Business, and Enterprise Copilot plans |
-
-### Advanced Features
-| Feature | Description |
-|---------|-------------|
-| **Multi-Account Pool** | Manage multiple GitHub accounts with automatic rotation strategies |
-| **Request Caching** | LRU cache with configurable TTL to save quota |
-| **Request Queue** | Concurrent request management with priority and limits |
-| **Rate Limiting** | Configurable rate limits with wait/error modes |
-| **Model Fallback** | Automatic fallback to alternative models when primary fails |
-| **Cost Tracking** | Estimate and track costs based on token usage |
-| **Webhook Notifications** | Send alerts to Discord, Slack, or custom webhooks |
-
-### Management Features
-| Feature | Description |
-|---------|-------------|
-| **WebUI Dashboard** | Web-based interface for monitoring and configuration |
-| **Usage Monitoring** | Track quota usage with detailed statistics |
-| **Request History** | View and filter past API requests |
-| **Live Logs** | Real-time server logs via SSE |
-| **Claude Code Integration** | One-command setup for Claude Code CLI |
-
----
-
-## Prerequisites
-
-- **Bun** >= 1.2.x
-- **GitHub Account** with active Copilot subscription (Individual, Business, or Enterprise)
-
----
-
-## Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/prassaaa/copilot-api.git
-cd copilot-api
-
-# Install dependencies
-bun install
-
-# Development mode
-bun run dev
-
-# Production mode
-bun run start
-
-# Authentication only
-bun run auth
-
-# Check usage/quota
-bun run check-usage
+```
+Client Request → Hono Server → Middleware (CORS, Auth, Logging)
+    → Cache Check → Queue → Rate Limit → Account Pool Selection
+    → Copilot API → Response Transform (OpenAI/Anthropic format) → Client
 ```
 
----
-
-## Commands
-
-### `start` - Start the API Server
-
-```bash
-bun run start [options]
-```
-
-| Option | Alias | Default | Description |
-|--------|-------|---------|-------------|
-| `--port` | `-p` | `4141` | Port to listen on |
-| `--verbose` | `-v` | `false` | Enable verbose logging |
-| `--account-type` | `-a` | `individual` | Account type: `individual`, `business`, `enterprise` |
-| `--manual` | - | `false` | Enable manual request approval |
-| `--rate-limit` | `-r` | - | Rate limit in seconds between requests |
-| `--wait` | `-w` | `false` | Wait instead of error when rate limited |
-| `--github-token` | `-g` | - | Provide GitHub token directly |
-| `--claude-code` | `-c` | `false` | Generate Claude Code launch command |
-| `--show-token` | - | `false` | Display tokens on fetch/refresh |
-| `--proxy-env` | - | `false` | Use proxy from environment variables |
-
-### `auth` - Authenticate with GitHub
-
-```bash
-bun run auth [options]
-```
-
-| Option | Alias | Default | Description |
-|--------|-------|---------|-------------|
-| `--verbose` | `-v` | `false` | Enable verbose logging |
-| `--show-token` | - | `false` | Show GitHub token on auth |
-
-### `check-usage` - Check Copilot Usage
-
-```bash
-bun run check-usage
-```
-
-Displays current Copilot quota and usage statistics in the terminal.
-
-### `debug` - Display Debug Information
-
-```bash
-bun run debug [options]
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--json` | `false` | Output debug info as JSON |
-
----
-
-## API Endpoints
-
-### OpenAI Compatible Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/chat/completions` | `POST` | Create chat completion |
-| `/chat/completions` | `POST` | Create chat completion (alias) |
-| `/v1/responses` | `POST` | Create response (for Codex models) |
-| `/responses` | `POST` | Create response (alias) |
-| `/v1/models` | `GET` | List available models |
-| `/models` | `GET` | List available models (alias) |
-| `/v1/embeddings` | `POST` | Create embeddings |
-| `/embeddings` | `POST` | Create embeddings (alias) |
-
-> **Note:** Codex models (e.g., `gpt-5.2-codex`, `gpt-5.3-codex`) are only accessible via the `/v1/responses` endpoint. They do not support `/v1/chat/completions`. The Responses API follows the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) format and supports both streaming and non-streaming modes.
-
-### Anthropic Compatible Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/messages` | `POST` | Create message (Anthropic format) |
-| `/v1/messages/count_tokens` | `POST` | Count tokens for messages |
-
-### Monitoring Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/usage` | `GET` | Get Copilot usage statistics |
-| `/token` | `GET` | Get current Copilot token |
-| `/account-limits` | `GET` | Get account rate limits |
-| `/health` | `GET` | Simple health check |
-| `/health/detailed` | `GET` | Detailed health status |
-
-### WebUI API Endpoints
-
-All WebUI endpoints are prefixed with `/api/` and may require authentication if password is configured.
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/login` | `POST` | Authenticate to WebUI |
-| `/api/logout` | `POST` | Clear session |
-| `/api/auth-status` | `GET` | Check authentication status |
-| `/api/status` | `GET` | Server status |
-| `/api/models` | `GET` | Available models |
-| `/api/copilot-usage` | `GET` | Copilot usage data |
-| `/api/config` | `GET/POST` | Get or update configuration |
-| `/api/accounts` | `GET/POST` | List or add accounts |
-| `/api/accounts/:id` | `DELETE` | Remove account |
-| `/api/accounts/refresh` | `POST` | Refresh account tokens |
-| `/api/accounts/oauth/start` | `POST` | Start OAuth flow |
-| `/api/accounts/oauth/complete` | `POST` | Complete OAuth flow |
-| `/api/logs/stream` | `GET` | Stream server logs (SSE) |
-| `/api/logs/recent` | `GET` | Get recent logs |
-
----
-
-## Configuration
-
-Configuration is stored in `~/.config/copilot-api/config.json`.
-
-### Configuration Options
-
-```json
-{
-  "port": 4141,
-  "debug": false,
-  "webuiPassword": "",
-
-  "rateLimitSeconds": null,
-  "rateLimitWait": false,
-
-  "fallbackEnabled": false,
-  "modelMapping": {},
-
-  "trackUsage": true,
-  "trackCost": true,
-
-  "poolEnabled": false,
-  "poolStrategy": "sticky",
-  "poolAccounts": [],
-
-  "queueEnabled": false,
-  "queueMaxConcurrent": 3,
-  "queueMaxSize": 100,
-  "queueTimeout": 60000,
-
-  "webhookEnabled": false,
-  "webhookProvider": "discord",
-  "webhookUrl": "",
-
-  "cacheEnabled": true,
-  "cacheMaxSize": 1000,
-  "cacheTtlSeconds": 3600,
-
-  "autoRotationEnabled": true
-}
-```
-
-### Pool Strategies
-
-| Strategy | Description |
-|----------|-------------|
-| `sticky` | Uses the same account until an error occurs |
-| `round-robin` | Rotates through accounts sequentially |
-| `quota-based` | Selects account with the most remaining quota |
-| `hybrid` | Sticky with automatic rotation on errors |
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Server port |
-| `DEBUG` | Enable debug mode |
-| `WEBUI_PASSWORD` | WebUI password |
-| `FALLBACK` | Enable model fallback |
-| `GH_TOKEN` | GitHub token |
-| `HTTP_PROXY` | HTTP proxy URL |
-| `HTTPS_PROXY` | HTTPS proxy URL |
-| `NO_PROXY` | Proxy bypass list |
-
----
-
-## Claude Code Integration
-
-### Method 1: Interactive Setup (Recommended)
-
-```bash
-bun run start --claude-code
-```
-
-This will:
-1. Start the proxy server
-2. Prompt you to select models
-3. Copy the launch command to your clipboard
-4. Paste and run in a new terminal to start Claude Code
-
-### Method 2: Manual Configuration
-
-Create `.claude/settings.json` in your project root:
-
-```json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:4141",
-    "ANTHROPIC_AUTH_TOKEN": "dummy",
-    "ANTHROPIC_MODEL": "gpt-4.1",
-    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1",
-    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
-  },
-  "permissions": {
-    "deny": ["WebSearch"]
-  }
-}
-```
-
----
-
-## WebUI Dashboard
-
-After starting the server, access the WebUI at `http://localhost:4141`.
-
-### Dashboard Features
-
-- **Real-time Quota Visualization** - Monitor your Copilot usage
-- **Live Server Logs** - View logs in real-time via SSE
-- **Account Pool Management** - Add/remove GitHub accounts
-- **OAuth Device Flow** - Easy account addition via browser
-- **Configuration Editor** - Modify settings without restart
-- **Request History** - View and filter past requests
-- **Cost Analytics** - Track estimated costs by model
-- **Queue Status** - Monitor request queue
-
----
-
-## Usage Examples
-
-### Basic Usage
-
-```bash
-# Start with default settings
-bun run start
-
-# Start with custom port
-bun run start --port 8080
-
-# Start with verbose logging
-bun run start --verbose
-```
-
-### With Rate Limiting
-
-```bash
-# 30 seconds between requests, error on limit
-bun run start --rate-limit 30
-
-# 30 seconds between requests, wait instead of error
-bun run start --rate-limit 30 --wait
-```
-
-### Business/Enterprise Account
-
-```bash
-# Business account
-bun run start --account-type business
-
-# Enterprise account
-bun run start --account-type enterprise
-```
-
-### With Proxy
-
-```bash
-# Set proxy environment variables
-export HTTP_PROXY=http://proxy.example.com:8080
-export HTTPS_PROXY=http://proxy.example.com:8080
-
-# Start with proxy support
-bun run start --proxy-env
-```
-
-### API Request Examples
-
-#### OpenAI Format
-
-```bash
-curl http://localhost:4141/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4.1",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
-#### OpenAI Responses Format (Codex Models)
-
-```bash
-curl http://localhost:4141/v1/responses \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-5.2-codex",
-    "stream": true,
-    "input": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
-#### Anthropic Format
-
-```bash
-curl http://localhost:4141/v1/messages \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: dummy" \
-  -H "anthropic-version: 2023-06-01" \
-  -d '{
-    "model": "claude-sonnet-4-20250514",
-    "max_tokens": 1024,
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
----
-
-## Project Structure
+### Komponen Utama
+
+| Komponen     | Lokasi                    | Deskripsi                              |
+| ------------ | ------------------------- | -------------------------------------- |
+| CLI Entry    | `src/main.ts`             | Command definitions pakai Citty        |
+| Server       | `src/server.ts`           | Hono app dengan middleware stack       |
+| Startup      | `src/start.ts`            | Server orchestration, token refresh    |
+| Account Pool | `src/lib/account-pool.ts` | Multi-account rotation (4 strategi)    |
+| Token Mgmt   | `src/lib/token.ts`        | GitHub & Copilot token handling        |
+| Config       | `src/lib/config.ts`       | File-based config dengan env overrides |
+| WebUI        | `src/webui/routes.ts`     | Dashboard API routes                   |
+| Frontend     | `public/`                 | Alpine.js + Tailwind CSS dashboard     |
+
+### Struktur Folder
 
 ```
 copilot-api/
 ├── src/
 │   ├── main.ts              # CLI entry point
-│   ├── server.ts            # Hono server setup
-│   ├── start.ts             # Server startup orchestration
-│   ├── auth.ts              # GitHub OAuth authentication
-│   ├── check-usage.ts       # Usage checking command
-│   ├── debug.ts             # Debug command
-│   ├── lib/                 # Core libraries
-│   │   ├── token.ts         # Token management
-│   │   ├── config.ts        # Configuration management
-│   │   ├── account-pool.ts  # Multi-account rotation
-│   │   ├── request-cache.ts # Request caching
-│   │   ├── request-queue.ts # Request queue management
-│   │   ├── cost-calculator.ts # Cost estimation
-│   │   ├── fallback.ts      # Model fallback logic
-│   │   └── ...
-│   ├── routes/              # API route handlers
-│   │   ├── chat-completions/ # OpenAI /v1/chat/completions
-│   │   ├── responses/       # OpenAI /v1/responses (Codex models)
-│   │   ├── embeddings/      # OpenAI /v1/embeddings
-│   │   ├── models/          # Model listing
-│   │   └── messages/        # Anthropic format handlers
-│   ├── services/            # External service integrations
-│   │   └── copilot.ts       # GitHub Copilot API client
-│   └── webui/               # WebUI API handlers
-├── public/                  # Static assets (WebUI)
-├── tests/                   # Test files
-└── package.json             # Dependencies
+│   ├── server.ts             # Hono server setup
+│   ├── start.ts              # Server orchestration
+│   ├── lib/                  # Core libraries
+│   ├── routes/               # API route handlers
+│   ├── services/             # External service clients
+│   └── webui/                # Dashboard API
+├── public/
+│   ├── index.html            # Dashboard UI (mobile-first)
+│   ├── js/app.js             # Alpine.js application
+│   └── favicon.svg           # Logo
+├── tests/                    # Unit & integration tests
+└── .github/workflows/        # CI/CD pipelines
 ```
 
----
+## Diagram Flow
 
-## Tech Stack
+```mermaid
+flowchart TD
+    Client[Client App] -->|Request| Server[Hono Server]
+    Server -->|Auth Check| Middleware[Middleware Stack]
+    Middleware -->|Cache Check| Cache{Cache Hit?}
+    Cache -->|Yes| Client
+    Cache -->|No| Queue[Request Queue]
+    Queue -->|Rate Limit| RateLimit[Rate Limiter]
+    RateLimit -->|Account Selection| Pool[Account Pool]
+    Pool -->|API Call| Copilot[GitHub Copilot API]
+    Copilot -->|Response| Transform[Response Transform]
+    Transform -->|OpenAI/Anthropic Format| Client
+```
 
-| Component | Technology |
-|-----------|------------|
-| Runtime | [Bun](https://bun.sh) |
-| Web Framework | [Hono](https://hono.dev) |
-| CLI Framework | [Citty](https://github.com/unjs/citty) |
-| Validation | [Zod](https://zod.dev) |
-| Build Tool | [tsdown](https://github.com/nicepkg/tsdown) |
-| Logging | [Consola](https://github.com/unjs/consola) |
-| Tokenizer | [gpt-tokenizer](https://github.com/niieani/gpt-tokenizer) |
+## Cara Install & Setup
 
----
+### Prerequisites
 
-## Data Storage
+- [Bun](https://bun.sh) >= 1.2.x
+- Akun GitHub dengan akses Copilot (Individual, Business, atau Enterprise)
 
-All data is stored locally in the user's home directory:
-
-| Path | Description |
-|------|-------------|
-| `~/.config/copilot-api/config.json` | Server configuration |
-| `~/.local/share/copilot-api/github-token` | GitHub access token |
-| `~/.local/share/copilot-api/account-pool.json` | Account pool state |
-| `~/.local/share/copilot-api/request-cache.json` | Request cache |
-| `~/.local/share/copilot-api/request-history.json` | Request history |
-| `~/.local/share/copilot-api/cost-history.json` | Cost tracking data |
-
----
-
-## Troubleshooting
-
-### Authentication Issues
+### Install
 
 ```bash
-# Re-authenticate
+# Clone repository
+git clone https://github.com/el-pablos/copilot-api.git
+cd copilot-api
+
+# Install dependencies
+bun install
+```
+
+### Autentikasi
+
+```bash
+# Login ke GitHub (OAuth device flow)
 bun run auth
-
-# Check debug info
-bun run debug
 ```
 
-### Rate Limiting
-
-If you're hitting rate limits:
-1. Use `--rate-limit` flag to enforce delays
-2. Enable request caching in config
-3. Use multi-account pool for load distribution
-
-### Connection Issues
+### Jalankan
 
 ```bash
-# Test health endpoint
-curl http://localhost:4141/health
+# Development mode (hot reload)
+bun run dev
 
-# Check detailed health
-curl http://localhost:4141/health/detailed
+# Production mode
+bun run start
+
+# Dengan custom port
+PORT=8080 bun run start
+```
+
+Dashboard otomatis available di `http://localhost:4141`
+
+## Konfigurasi
+
+### Environment Variables
+
+| Variable         | Default | Deskripsi                               |
+| ---------------- | ------- | --------------------------------------- |
+| `PORT`           | `4141`  | Port server                             |
+| `DEBUG`          | `false` | Verbose logging                         |
+| `WEBUI_PASSWORD` | -       | Password untuk dashboard WebUI          |
+| `GH_TOKEN`       | -       | GitHub token (alternatif OAuth)         |
+| `HTTP_PROXY`     | -       | HTTP proxy (dengan flag `--proxy-env`)  |
+| `HTTPS_PROXY`    | -       | HTTPS proxy (dengan flag `--proxy-env`) |
+
+### Config File
+
+Konfigurasi disimpan di `~/.config/copilot-api/config.json`. Bisa diedit lewat dashboard WebUI atau langsung edit file JSON.
+
+## Dashboard WebUI
+
+Dashboard mobile-first yang bisa diakses langsung dari browser:
+
+### Fitur Dashboard
+
+- **Overview** — Statistik real-time, chart usage by model, runtime pulse
+- **Model Catalog** — Browse semua model dengan filter vendor dan search
+- **Usage & Quotas** — Detail quota per akun (Chat, Completions, Premium)
+- **Account Pool** — Manajemen multi-account dengan OAuth flow
+- **Real-time Logs** — Live streaming log dengan filter level, search, export
+- **Settings** — Server config, Claude CLI integration, model mapping
+- **Request History** — Audit trail paginated dengan filter dan cost tracking
+- **API Playground** — Test endpoint langsung dengan preset templates
+
+### Mobile Features
+
+- 🎨 **Gruvbox Dark Theme** — Eye-friendly dark color scheme yang konsisten
+- 📱 Responsive sidebar dengan hamburger menu dan swipe-to-close gesture
+- 🔽 Bottom navigation bar dengan 5 quick access tabs
+- 📊 Card view responsive untuk data tables
+- 👆 Touch-friendly buttons (min 48px targets sesuai Material Design)
+- ⌨️ Keyboard navigation dengan visible focus indicators & focus trap
+- ♿ ARIA labels dan accessibility attributes komprehensif
+- 📐 Safe area support untuk notched devices (iPhone X+)
+- 🍞 Toast queue system dengan auto-dismiss dan swipe-to-dismiss
+- 💀 Skeleton loading screens untuk better perceived performance
+
+## API Endpoints
+
+### OpenAI Compatible
+
+| Method | Endpoint               | Deskripsi                              |
+| ------ | ---------------------- | -------------------------------------- |
+| POST   | `/v1/chat/completions` | Chat completions (streaming supported) |
+| POST   | `/v1/embeddings`       | Text embeddings                        |
+| GET    | `/v1/models`           | List available models                  |
+| POST   | `/v1/responses`        | Responses API                          |
+
+### Anthropic Compatible
+
+| Method | Endpoint       | Deskripsi                          |
+| ------ | -------------- | ---------------------------------- |
+| POST   | `/v1/messages` | Messages API (streaming supported) |
+
+### Utility
+
+| Method | Endpoint  | Deskripsi        |
+| ------ | --------- | ---------------- |
+| GET    | `/health` | Health check     |
+| GET    | `/usage`  | Usage statistics |
+| GET    | `/token`  | Token info       |
+
+## Commands
+
+```bash
+bun run dev              # Development mode dengan hot reload
+bun run start            # Production mode
+bun run build            # Build dengan tsdown
+bun run lint             # Lint dengan ESLint
+bun run typecheck        # TypeScript type checking
+bun test                 # Jalankan semua test
+bun run auth             # Autentikasi GitHub
+bun run check-usage      # Cek quota Copilot
+bun run debug            # Display debug info
 ```
 
 ---
 
-## Contributing
+<p align="center">
+  <img src="https://img.shields.io/github/stars/el-pablos/copilot-api?style=social" alt="Stars" />
+  <img src="https://img.shields.io/github/forks/el-pablos/copilot-api?style=social" alt="Forks" />
+  <img src="https://img.shields.io/github/issues/el-pablos/copilot-api?style=flat-square" alt="Issues" />
+  <img src="https://img.shields.io/github/last-commit/el-pablos/copilot-api?style=flat-square" alt="Last Commit" />
+</p>
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Color Palette
 
----
+Dashboard menggunakan **Gruvbox Dark** theme yang eye-friendly:
 
-## License
+| Color            | Hex       | Usage                         |
+| ---------------- | --------- | ----------------------------- |
+| 🟠 Orange Bright | `#fe8019` | Primary accent, active states |
+| 🟢 Green Bright  | `#b8bb26` | Success, online status        |
+| 🔵 Blue Bright   | `#83a598` | Links, info badges            |
+| 🟣 Purple Bright | `#d3869b` | Pool badges, secondary accent |
+| 🟡 Yellow Bright | `#fabd2f` | Warnings, highlights          |
+| 🔴 Red Bright    | `#fb4934` | Errors, destructive actions   |
+| 🔵 Aqua Bright   | `#8ec07c` | Charts, cached status         |
+| ⬛ Background    | `#1d2021` | Main background (hard)        |
+| ⬜ Foreground    | `#ebdbb2` | Primary text                  |
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Kontribusi
 
----
+Kontribusi terbuka! Silahkan buka issue atau pull request. Pastikan semua test passed sebelum submit PR.
 
-## Acknowledgements
+## Lisensi
 
-This project is a rebuild/fork of the original [copilot-api](https://github.com/ericc-ch/copilot-api) created by [Erick Christian](https://github.com/ericc-ch).
-
-Special thanks to him for creating the original project and making it open source. His work laid the foundation for this project.
-
----
-
-## Disclaimer
-
-This project is not affiliated with, endorsed by, or sponsored by GitHub or Microsoft. GitHub Copilot is a trademark of GitHub, Inc. Use this software responsibly and in accordance with GitHub's terms of service.
+[MIT License](LICENSE) — Prasetyo Ari Wibowo

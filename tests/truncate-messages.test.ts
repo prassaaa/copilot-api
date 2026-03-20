@@ -32,4 +32,27 @@ describe("resolvePromptTokenLimit", () => {
   test("returns null when no limits are available", () => {
     expect(resolvePromptTokenLimit(undefined)).toBeNull()
   })
+
+  test("applies safety multiplier for Gemini models", () => {
+    // Gemini uses 50% safety multiplier
+    expect(
+      resolvePromptTokenLimit(
+        { max_prompt_tokens: 128000 },
+        "gemini-3-pro-preview",
+      ),
+    ).toBe(60800) // 121600 * 0.5
+  })
+
+  test("applies safety multiplier for non-OpenAI models", () => {
+    // Non-OpenAI, non-Gemini models use 70% safety multiplier
+    expect(
+      resolvePromptTokenLimit({ max_prompt_tokens: 128000 }, "claude-sonnet-4"),
+    ).toBe(85120) // 121600 * 0.7
+  })
+
+  test("no safety multiplier for OpenAI models", () => {
+    expect(
+      resolvePromptTokenLimit({ max_prompt_tokens: 128000 }, "gpt-4.1"),
+    ).toBe(121600) // No multiplier
+  })
 })

@@ -10,6 +10,23 @@ import path from "node:path"
 
 import type { SelectionStrategy } from "./account-pool"
 
+// Provider configuration types
+export interface ProviderConfig {
+  type: "anthropic"
+  enabled: boolean
+  baseUrl: string
+  apiKey: string
+  adjustInputTokens?: boolean
+  models?: Record<
+    string,
+    {
+      temperature?: number
+      topP?: number
+      topK?: number
+    }
+  >
+}
+
 // Default configuration
 const DEFAULT_CONFIG = {
   // Server settings
@@ -34,6 +51,11 @@ const DEFAULT_CONFIG = {
   // Claude CLI defaults
   defaultModel: "gpt-4.1",
   defaultSmallModel: "gpt-4.1",
+
+  // Quota optimization settings
+  smallModel: "gpt-5-mini", // Model untuk warmup/compact requests (tidak pakai quota premium)
+  compactUseSmallModel: true, // Route compact requests ke small model
+  warmupUseSmallModel: true, // Route warmup requests (no tools) ke small model
 
   // Multi-account pool
   poolEnabled: false,
@@ -65,6 +87,9 @@ const DEFAULT_CONFIG = {
   cacheMaxSize: 1000,
   cacheTtlSeconds: 3600,
 
+  // Request timeout (for long model responses like Claude Opus)
+  requestTimeoutMs: 300000, // 5 minutes default
+
   // Auto account rotation
   autoRotationEnabled: true,
   autoRotationTriggers: {
@@ -73,6 +98,23 @@ const DEFAULT_CONFIG = {
     requestCount: 0, // 0 = disabled
   },
   autoRotationCooldownMinutes: 30,
+
+  // Model reasoning efforts
+  modelReasoningEfforts: {
+    "gpt-5-mini": "low",
+    "gpt-5.3-codex": "xhigh",
+    "gpt-5.4": "xhigh",
+  } as Record<string, "none" | "minimal" | "low" | "medium" | "high" | "xhigh">,
+
+  // Extra prompts per model
+  extraPrompts: {} as Record<string, string>,
+
+  // Feature toggles
+  useFunctionApplyPatch: true,
+  useMessagesApi: true,
+
+  // Context management models
+  responsesApiContextManagementModels: [] as Array<string>,
 }
 
 export type Config = typeof DEFAULT_CONFIG
@@ -140,6 +182,15 @@ export async function loadConfig(): Promise<Config> {
     if (process.env.WEBUI_PASSWORD)
       config.webuiPassword = process.env.WEBUI_PASSWORD
     if (process.env.FALLBACK === "true") config.fallbackEnabled = true
+    if (process.env.CHAT_COMPLETION_TIMEOUT_MS) {
+      const timeout = Number.parseInt(
+        process.env.CHAT_COMPLETION_TIMEOUT_MS,
+        10,
+      )
+      if (Number.isFinite(timeout) && timeout > 0) {
+        config.requestTimeoutMs = timeout
+      }
+    }
 
     return config
   })
@@ -196,4 +247,68 @@ export function getConfigDir(): string {
  */
 export function getConfigFile(): string {
   return CONFIG_FILE
+}
+
+/**
+ * Get mapped model name from config
+ * Returns the mapped model if a mapping exists, otherwise returns the original model
+ */
+export function getMappedModel(model: string): string {
+  const mapping = config.modelMapping
+  if (model in mapping) {
+    return mapping[model]
+  }
+  return model
+}
+
+/**
+ * Get reasoning effort for a specific model
+ */
+export function getReasoningEffortForModel(
+  model: string,
+): "none" | "minimal" | "low" | "medium" | "high" | "xhigh" {
+  const efforts = config.modelReasoningEfforts
+  if (model in efforts) {
+    return efforts[model]
+  }
+  return "high" // default
+}
+
+/**
+ * Get extra prompt for a specific model
+ */
+export function getExtraPromptForModel(model: string): string {
+  const prompts = config.extraPrompts
+  if (model in prompts) {
+    return prompts[model]
+  }
+  return ""
+}
+
+/**
+ * Check if Messages API is enabled
+ */
+export function isMessagesApiEnabled(): boolean {
+  return config.useMessagesApi
+}
+
+/**
+ * Get list of models that support context management
+ */
+export function getResponsesApiContextManagementModels(): Array<string> {
+  return config.responsesApiContextManagementModels
+}
+
+/**
+ * Check if a model supports Responses API context management
+ */
+export function isResponsesApiContextManagementModel(model: string): boolean {
+  return getResponsesApiContextManagementModels().includes(model)
+}
+
+/**
+ * Check if useFunctionApplyPatch is enabled
+ */
+export function isUseFunctionApplyPatchEnabled(): boolean {
+  return config.useFunctionApplyPatch
 }

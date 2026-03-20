@@ -1,10 +1,10 @@
-const FALLBACK = "1.109.3";
+const FALLBACK = "1.109.3"
 
 export async function getVSCodeVersion() {
-  const controller = new AbortController();
+  const controller = new AbortController()
   const timeout = setTimeout(() => {
-    controller.abort();
-  }, 5000);
+    controller.abort()
+  }, 5000)
 
   try {
     const response = await fetch(
@@ -12,22 +12,22 @@ export async function getVSCodeVersion() {
       {
         signal: controller.signal,
       },
-    );
+    )
 
-    const pkgbuild = await response.text();
-    const pkgverRegex = /pkgver=([0-9.]+)/;
-    const match = pkgbuild.match(pkgverRegex);
+    const pkgbuild = await response.text()
+    const pkgverRegex = /pkgver=([0-9.]+)/
+    const match = pkgbuild.match(pkgverRegex)
 
     if (match) {
-      return match[1];
+      return match[1]
     }
 
-    return FALLBACK;
+    return FALLBACK
   } catch {
-    return FALLBACK;
+    return FALLBACK
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeout)
   }
 }
 
-await getVSCodeVersion();
+await getVSCodeVersion()

@@ -28,6 +28,7 @@ import type {
   Tool as ResponseTool,
 } from "~/services/copilot/create-responses"
 
+import { getReasoningEffortForModel } from "~/lib/config"
 import { logEmitter } from "~/lib/logger"
 import { state } from "~/lib/state"
 import {
@@ -238,6 +239,15 @@ export function convertToResponsesPayload(
     model: payload.model,
     stream: payload.stream,
     input,
+    temperature: 1,
+    max_output_tokens: Math.max(payload.max_tokens ?? 12800, 12800),
+    store: false,
+    parallel_tool_calls: true,
+    reasoning: {
+      effort: getReasoningEffortForModel(payload.model),
+      summary: "detailed",
+    },
+    include: ["reasoning.encrypted_content"],
   }
 
   if (instructions) {
@@ -253,14 +263,8 @@ export function convertToResponsesPayload(
     responsesPayload.tool_choice = convertToolChoice(payload.tool_choice)
   }
 
-  if (payload.temperature !== null && payload.temperature !== undefined) {
-    responsesPayload.temperature = payload.temperature
-  }
   if (payload.top_p !== null && payload.top_p !== undefined) {
     responsesPayload.top_p = payload.top_p
-  }
-  if (payload.max_tokens !== null && payload.max_tokens !== undefined) {
-    responsesPayload.max_output_tokens = payload.max_tokens
   }
 
   return responsesPayload
