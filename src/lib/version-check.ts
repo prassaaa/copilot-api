@@ -23,17 +23,42 @@ function getLocalCommit(): string {
   return execSync("git rev-parse HEAD", { stdio: "pipe" }).toString().trim()
 }
 
-function getRemoteCommitFromGit(): string {
-  // Fetch latest from remote and get the commit hash
-  execSync("git fetch origin --quiet", { stdio: "pipe" })
-  return execSync(`git rev-parse origin/${DEFAULT_BRANCH}`, { stdio: "pipe" })
+function getRemoteCommit(branch: string): string {
+  const output = execSync(`git ls-remote --heads origin ${branch}`, {
+    stdio: "pipe",
+  })
     .toString()
     .trim()
+
+  const [sha] = output.split(/\s+/)
+  if (!sha) {
+    throw new Error(`Cannot resolve origin/${branch}`)
+  }
+
+  return sha
 }
 
-export function checkVersion(): VersionCheckResult {
+function isLocalUpToDate(local: string, remote: string): boolean {
+  if (local === remote) {
+    return true
+  }
+
+  try {
+    execSync(`git merge-base --is-ancestor ${remote} ${local}`, {
+      stdio: "ignore",
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function checkVersion(options?: {
+  force?: boolean
+}): VersionCheckResult {
+  const force = options?.force === true
   const now = Date.now()
-  if (cachedResult && now - lastChecked < CACHE_TTL_MS) {
+  if (!force && cachedResult && now - lastChecked < CACHE_TTL_MS) {
     return cachedResult
   }
 
@@ -41,10 +66,11 @@ export function checkVersion(): VersionCheckResult {
 
   try {
     const local = getLocalCommit()
-    const remote = getRemoteCommitFromGit()
+    const remote = getRemoteCommit(DEFAULT_BRANCH)
+    const upToDate = isLocalUpToDate(local, remote)
 
     const result: VersionCheckResult =
-      local === remote ?
+      upToDate ?
         { status: "ok", local, remote, updateCommand }
       : {
           status: "outdated",

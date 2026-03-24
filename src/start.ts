@@ -203,6 +203,11 @@ async function addInitialAccountIfNeeded(poolConfig: boolean): Promise<void> {
 
 export async function runServer(options: RunServerOptions): Promise<void> {
   const config = await loadConfig()
+
+  // Use config.port if different from default (CLI arg default is 4141)
+  // This allows config file and PORT env var to override the default
+  const actualPort = config.port !== 4141 ? config.port : options.port
+
   state.rateLimitSeconds = config.rateLimitSeconds
   state.rateLimitWait = config.rateLimitWait
   await applyCliOptions(options)
@@ -228,7 +233,7 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     `Available models: \n${state.models?.data.map((model) => `- ${model.id}`).join("\n")}`,
   )
 
-  const serverUrl = `http://localhost:${options.port}`
+  const serverUrl = `http://localhost:${actualPort}`
 
   if (options.claudeCode) {
     await setupClaudeCodeIntegration(serverUrl)
@@ -250,7 +255,7 @@ export async function runServer(options: RunServerOptions): Promise<void> {
 
   serve({
     fetch: server.fetch as ServerHandler,
-    port: options.port,
+    port: actualPort,
   })
 }
 

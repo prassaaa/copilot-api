@@ -100,9 +100,11 @@ const DEFAULT_CONFIG = {
   autoRotationCooldownMinutes: 30,
 
   // Model reasoning efforts
+  // fix: tambahkan gpt-5.4-mini dengan xhigh effort - 2026-03-24
   modelReasoningEfforts: {
     "gpt-5-mini": "low",
     "gpt-5.3-codex": "xhigh",
+    "gpt-5.4-mini": "xhigh",
     "gpt-5.4": "xhigh",
   } as Record<string, "none" | "minimal" | "low" | "medium" | "high" | "xhigh">,
 
@@ -115,6 +117,18 @@ const DEFAULT_CONFIG = {
 
   // Context management models
   responsesApiContextManagementModels: [] as Array<string>,
+
+  // Default max output tokens (32K default, can be increased up to model limit)
+  // Claude models support up to 128K output tokens
+  defaultMaxOutputTokens: 32768,
+
+  // Context window override (0 = use model's default, >0 = override to this value)
+  // Set to high value like 2000000 (2M) to effectively disable truncation
+  // WARNING: GitHub Copilot API may reject requests exceeding actual model limits
+  maxContextTokensOverride: 0,
+
+  // Disable message truncation entirely (risky - may cause API errors)
+  disableTruncation: false,
 }
 
 export type Config = typeof DEFAULT_CONFIG
@@ -311,4 +325,27 @@ export function isResponsesApiContextManagementModel(model: string): boolean {
  */
 export function isUseFunctionApplyPatchEnabled(): boolean {
   return config.useFunctionApplyPatch
+}
+
+/**
+ * Get default max output tokens
+ * Used when client doesn't specify max_tokens
+ */
+export function getDefaultMaxOutputTokens(): number {
+  return config.defaultMaxOutputTokens
+}
+
+/**
+ * Get max context tokens override
+ * Returns 0 if no override, otherwise the override value
+ */
+export function getMaxContextTokensOverride(): number {
+  return config.maxContextTokensOverride
+}
+
+/**
+ * Check if truncation is disabled
+ */
+export function isTruncationDisabled(): boolean {
+  return config.disableTruncation
 }

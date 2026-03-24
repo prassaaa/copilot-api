@@ -52,7 +52,6 @@ import { pollAccessToken } from "~/services/github/poll-access-token"
 import { cacheRoutes } from "~/webui/api/cache"
 import { costRoutes } from "~/webui/api/cost"
 import { historyRoutes } from "~/webui/api/history"
-import { modelMappingRoutes } from "~/webui/api/model-mappings"
 import { notificationRoutes } from "~/webui/api/notifications"
 import { queueRoutes } from "~/webui/api/queue"
 import { webhookRoutes } from "~/webui/api/webhooks"
@@ -185,7 +184,9 @@ webuiRoutes.post("/api/logout", (c) => {
  */
 webuiRoutes.get("/api/version-check", (c) => {
   try {
-    const result = checkVersion()
+    const forceParam = c.req.query("force")
+    const force = forceParam === "1" || forceParam === "true"
+    const result = checkVersion({ force })
     return c.json(result)
   } catch (error) {
     return c.json({ status: "error", message: (error as Error).message }, 500)
@@ -255,7 +256,6 @@ webuiRoutes.route("/api/history", historyRoutes)
 webuiRoutes.route("/api/cache", cacheRoutes)
 webuiRoutes.route("/api/queue", queueRoutes)
 webuiRoutes.route("/api/cost", costRoutes)
-webuiRoutes.route("/api/model-mappings", modelMappingRoutes)
 
 // ==========================================
 // Dashboard API (Protected)

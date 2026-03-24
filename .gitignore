@@ -68,3 +68,26 @@ pids/
 .yarn-integrity
 .lock-wscript
 *.tgz
+
+# Environment files - JANGAN PERNAH COMMIT
+*.env
+
+# Secrets dan credentials
+*.pem
+*.key
+*.secret
+secrets/
+credentials/
+*.credentials
+
+# API Keys dan Tokens
+*.token
+*.apikey
+api-keys.json
+tokens.json
+github-token*
+copilot-token*
+
+# Config dengan secrets
+config.local.json
+config.secret.json

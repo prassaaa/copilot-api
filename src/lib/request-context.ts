@@ -1,6 +1,7 @@
 /**
- * Request Context using AsyncLocalStorage
- * Provides request-scoped context for tracing and logging
+ * Request Context Module
+ * Menyimpan context request untuk digunakan di seluruh aplikasi
+ * Menggunakan AsyncLocalStorage untuk thread-safe storage
  */
 
 import { AsyncLocalStorage } from "node:async_hooks"
@@ -8,20 +9,33 @@ import { AsyncLocalStorage } from "node:async_hooks"
 export interface RequestContext {
   traceId: string
   startTime: number
+  sessionId?: string
+  userId?: string
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>()
 
-/**
- * Get current request context
- */
+export function generateTraceId(): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).slice(2, 8)
+  return `${timestamp}-${random}`
+}
+
+export function runWithContext<T>(context: RequestContext, fn: () => T): T {
+  return requestContext.run(context, fn)
+}
+
 export function getRequestContext(): RequestContext | undefined {
   return requestContext.getStore()
 }
 
+export function getTraceId(): string | undefined {
+  return requestContext.getStore()?.traceId
+}
+
 /**
- * Get current trace ID or undefined
+ * @deprecated Use getTraceId() instead
  */
 export function getCurrentTraceId(): string | undefined {
-  return requestContext.getStore()?.traceId
+  return getTraceId()
 }

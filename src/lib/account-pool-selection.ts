@@ -51,12 +51,19 @@ function selectStickyAccount(
   return selected
 }
 
+// fix: perbaiki round-robin agar currentIndex tidak di-modulo saat increment - 2026-03-24
+// currentIndex harus terus naik sebagai global counter, bukan di-modulo dengan activeAccounts.length
+// karena activeAccounts.length bisa berubah-ubah (account bisa jadi rate-limited atau kembali aktif)
 function selectRoundRobinAccount(
   activeAccounts: Array<AccountStatus>,
 ): AccountStatus {
   const index = poolState.currentIndex % activeAccounts.length
-  poolState.currentIndex = (poolState.currentIndex + 1) % activeAccounts.length
-  return activeAccounts[index]
+  const selected = activeAccounts[index]
+  poolState.currentIndex++
+  consola.info(
+    `[round-robin] selected=${selected.login}, index=${index}, newIndex=${poolState.currentIndex}, activeCount=${activeAccounts.length}`,
+  )
+  return selected
 }
 
 function selectByQuota(activeAccounts: Array<AccountStatus>): AccountStatus {

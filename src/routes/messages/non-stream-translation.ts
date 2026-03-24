@@ -1,3 +1,5 @@
+import type { Model } from "~/services/copilot/get-models"
+
 import { normalizeSdkModelId } from "~/lib/models"
 import { sanitizeBillingHeader } from "~/lib/utils"
 import {
@@ -26,11 +28,16 @@ import {
 } from "./anthropic-types"
 import { mapOpenAIStopReasonToAnthropic } from "./utils"
 
+// Compatible with opencode - default thinking text placeholder
+export const THINKING_TEXT = "Thinking..."
+
 // Payload translation
 
 export function translateToOpenAI(
   payload: AnthropicMessagesPayload,
+  selectedModel?: Model,
 ): ChatCompletionsPayload {
+  const thinkingBudget = getThinkingBudget(payload, selectedModel)
   return {
     model: translateModelName(payload.model),
     messages: translateAnthropicMessagesToOpenAI(
@@ -45,7 +52,40 @@ export function translateToOpenAI(
     user: payload.metadata?.user_id,
     tools: translateAnthropicToolsToOpenAI(payload.tools),
     tool_choice: translateAnthropicToolChoiceToOpenAI(payload.tool_choice),
+    thinking_budget: thinkingBudget,
   }
+}
+
+/**
+ * Calculate thinking budget for Chat Completions API.
+ * This enables extended thinking for models that support thinking_budget
+ * but not adaptive_thinking (e.g., Claude 4.5).
+ */
+function getThinkingBudget(
+  payload: AnthropicMessagesPayload,
+  model: Model | undefined,
+): number | undefined {
+  const thinking = payload.thinking
+
+  // If model has max_thinking_budget, calculate appropriate budget
+  if (model?.capabilities.supports?.max_thinking_budget) {
+    const maxThinkingBudget = Math.min(
+      model.capabilities.supports.max_thinking_budget,
+      (model.capabilities.limits?.max_output_tokens ?? 32000) - 1,
+    )
+
+    if (maxThinkingBudget > 0) {
+      // Use budget_tokens from payload if provided, otherwise use max
+      const requestedBudget = thinking?.budget_tokens ?? maxThinkingBudget
+      const budgetTokens = Math.min(requestedBudget, maxThinkingBudget)
+      return Math.max(
+        budgetTokens,
+        model.capabilities.supports.min_thinking_budget ?? 1024,
+      )
+    }
+  }
+
+  return undefined
 }
 
 function translateModelName(model: string): string {
@@ -418,4 +458,32 @@ function getAnthropicToolUseBlocks(
       input,
     }
   })
+}
+
+/**
+ * Translate OpenAI payload back to Anthropic format.
+ * Used after truncation to preserve original Anthropic payload structure.
+ */
+export function translateOpenAIPayloadToAnthropic(
+  openAIPayload: ChatCompletionsPayload,
+  originalPayload: AnthropicMessagesPayload,
+): AnthropicMessagesPayload {
+  // For truncation, we just need to update the messages count
+  // while preserving the original Anthropic format
+  const truncatedMessageCount = openAIPayload.messages.filter(
+    (m) => m.role !== "system",
+  ).length
+
+  // Calculate how many original messages to keep based on truncation
+  const originalNonSystemMessages = originalPayload.messages
+
+  // If truncated, take the last N messages
+  if (truncatedMessageCount < originalNonSystemMessages.length) {
+    return {
+      ...originalPayload,
+      messages: originalNonSystemMessages.slice(-truncatedMessageCount),
+    }
+  }
+
+  return originalPayload
 }

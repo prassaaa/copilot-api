@@ -1,5 +1,6 @@
 import type { Context } from "hono"
 
+import { getDefaultMaxOutputTokens } from "~/lib/config"
 import { HTTPError } from "~/lib/error"
 
 import type {
@@ -354,11 +355,18 @@ function resolveMessages(
   return parseInputField(rawPayload.input)
 }
 
+/**
+ * Resolve max_tokens from payload.
+ * Uses config.defaultMaxOutputTokens (default 32K) to allow longer outputs.
+ * Claude models support up to 128K output tokens.
+ * User can override via payload or config.
+ */
 function resolveMaxTokens(rawMaxTokens: unknown): number {
   if (typeof rawMaxTokens === "number" && Number.isFinite(rawMaxTokens)) {
     return rawMaxTokens
   }
-  return 4096
+  // Use configured default for better output capability
+  return getDefaultMaxOutputTokens()
 }
 
 function assignSamplingFields(

@@ -29,6 +29,8 @@ export interface ChatCompletionChunk {
 interface Delta {
   content?: string | null
   role?: "user" | "assistant" | "system" | "tool"
+  reasoning_text?: string | null
+  reasoning_opaque?: string | null
   tool_calls?: Array<{
     index: number
     id?: string
@@ -69,6 +71,8 @@ export interface ChatCompletionResponse {
 interface ResponseMessage {
   role: "assistant"
   content: string | null
+  reasoning_text?: string | null
+  reasoning_opaque?: string | null
   tool_calls?: Array<ToolCall>
 }
 
@@ -111,6 +115,8 @@ export interface ChatCompletionsPayload {
     effort?: "low" | "medium" | "high"
     budget_tokens?: number
   } | null
+  // Separate thinking_budget field for Chat Completions API (used by Claude 4.5)
+  thinking_budget?: number
 }
 
 export interface Tool {

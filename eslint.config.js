@@ -5,6 +5,12 @@ export default [
     prettier: {
       plugins: ["prettier-plugin-packagejson"],
     },
-    ignores: ["public/**", "pages/**"],
+    ignores: [
+      "public/**",
+      "pages/**",
+      "**/__tests__/**",
+      "**/*.test.ts",
+      "tests/**",
+    ],
   }),
 ]

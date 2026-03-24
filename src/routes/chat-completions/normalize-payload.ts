@@ -96,6 +96,18 @@ export function normalizeModelLevelSuffix(
     }
   }
 
+  // fix: auto-inject reasoning_effort dari config untuk gpt-5 models tanpa suffix - 2026-03-24
+  if (
+    supportsGptReasoningEffort(baseModel)
+    && nextPayload.reasoning_effort === undefined
+  ) {
+    const configuredEffort = getReasoningEffortForModel(baseModel)
+    return {
+      ...nextPayload,
+      reasoning_effort: configuredEffort,
+    }
+  }
+
   return nextPayload
 }
 

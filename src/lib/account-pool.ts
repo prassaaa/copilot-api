@@ -238,6 +238,7 @@ export async function initializePool(config: PoolConfig): Promise<void> {
   )
 }
 
+// eslint-disable-next-line complexity
 export async function getPooledCopilotToken(): Promise<string | null> {
   // Check for monthly reset first
   checkMonthlyReset()
@@ -252,6 +253,12 @@ export async function getPooledCopilotToken(): Promise<string | null> {
 
     const account = selectAccount()
     if (!account) return null
+
+    // Save state after selection to persist currentIndex for round-robin
+    // This ensures the next request uses the next account in rotation
+    if (poolConfig.strategy === "round-robin") {
+      savePoolState()
+    }
 
     // Skip accounts we've already tried this round
     if (triedAccounts.has(account.id)) {
@@ -377,15 +384,20 @@ async function rotateToNextAccount({
   const nextAccount = findNextAvailableAccount(account.id)
   if (nextAccount) {
     poolState.stickyAccountId = nextAccount.id
-    poolState.currentIndex = poolState.accounts.findIndex(
-      (a) => a.id === nextAccount.id,
-    )
+    // fix: jangan set currentIndex untuk round-robin karena counter itu dikelola oleh selectRoundRobinAccount() - 2026-03-24
+    // untuk strategy lain, currentIndex digunakan sebagai index ke poolState.accounts
+    if (poolConfig.strategy !== "round-robin") {
+      poolState.currentIndex = poolState.accounts.findIndex(
+        (a) => a.id === nextAccount.id,
+      )
+    }
     poolState.lastAutoRotationAt = Date.now()
     syncGlobalStateToAccount(nextAccount)
     await notifyAccountRotation(account.login, nextAccount.login, reason)
   }
 }
 
+// eslint-disable-next-line complexity
 export function reportAccountError(
   errorType: "rate-limit" | "auth" | "quota" | "other",
   resetAt?: number,
@@ -450,9 +462,12 @@ export function reportAccountError(
     const nextAccount = findNextAvailableAccount(account.id)
     if (nextAccount) {
       poolState.stickyAccountId = nextAccount.id
-      poolState.currentIndex = poolState.accounts.findIndex(
-        (a) => a.id === nextAccount.id,
-      )
+      // fix: jangan set currentIndex untuk round-robin karena counter itu dikelola oleh selectRoundRobinAccount() - 2026-03-24
+      if (poolConfig.strategy !== "round-robin") {
+        poolState.currentIndex = poolState.accounts.findIndex(
+          (a) => a.id === nextAccount.id,
+        )
+      }
       poolState.lastAutoRotationAt = Date.now()
       syncGlobalStateToAccount(nextAccount)
       consola.info(
@@ -461,7 +476,12 @@ export function reportAccountError(
       void notifyAccountRotation(previousAccount, nextAccount.login, errorType)
     } else {
       poolState.stickyAccountId = undefined
-      poolState.currentIndex++
+      // fix: untuk round-robin, increment counter; untuk lain, sama seperti sebelumnya
+      if (poolConfig.strategy === "round-robin") {
+        // tidak perlu increment, biarkan selectRoundRobinAccount() yang mengelola
+      } else {
+        poolState.currentIndex++
+      }
     }
   }
 

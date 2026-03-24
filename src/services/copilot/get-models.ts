@@ -36,6 +36,9 @@ interface ModelSupports {
   streaming?: boolean
   structured_outputs?: boolean
   vision?: boolean
+  adaptive_thinking?: boolean
+  max_thinking_budget?: number
+  min_thinking_budget?: number
 }
 
 interface ModelCapabilities {

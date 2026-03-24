@@ -1,19 +1,27 @@
 {
   "name": "copilot-api",
   "version": "0.7.0",
-  "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
+  "description": "GitHub Copilot API Proxy dengan fitur enterprise-grade untuk integrasi Claude Code. Mendukung thinking mechanism, multi-account pool, request caching, dan file-based logging.",
   "keywords": [
-    "proxy",
     "github-copilot",
-    "openai-compatible"
+    "claude-code",
+    "api-proxy",
+    "anthropic",
+    "openai",
+    "thinking-mechanism",
+    "enterprise",
+    "typescript"
   ],
-  "homepage": "https://github.com/prassaaa/copilot-api",
-  "bugs": "https://github.com/prassaaa/copilot-api/issues",
+  "homepage": "https://github.com/el-pablos/copilot-api#readme",
+  "bugs": {
+    "url": "https://github.com/el-pablos/copilot-api/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/prassaaa/copilot-api.git"
+    "url": "https://github.com/el-pablos/copilot-api.git"
   },
-  "author": "Prasetyo Ari Wibowo",
+  "license": "MIT",
+  "author": "el-pablos <yeteprem.end23juni@gmail.com>",
   "type": "module",
   "bin": {
     "copilot-api": "./dist/main.js"
